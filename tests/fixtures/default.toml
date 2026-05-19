@@ -1,0 +1,13 @@
+[global]
+level = "info"
+
+[filter]
+default_level = "info"
+
+[[appender]]
+name = "stdout"
+kind = "stdout"
+enabled = true
+
+[appender.formatter]
+type = "default"

@@ -1,0 +1,9 @@
+[appender]
+name = "file"
+kind = "file"
+path = "/tmp/test_tracing.log"
+append = true
+
+[appender.formatter]
+type = "pattern"
+pattern = "%d [%L] %m%n"

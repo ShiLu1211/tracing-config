@@ -1,0 +1,16 @@
+[global]
+level = "debug"
+ansi = true
+
+[filter]
+default_level = "info"
+directives = ["tracing_config=debug"]
+
+[[appender]]
+name = "stdout"
+kind = "stdout"
+enabled = true
+
+[appender.formatter]
+type = "logback"
+pattern = "%d{%Y-%m-%d %H:%M:%S} [%level] %logger{20} - %msg%n"

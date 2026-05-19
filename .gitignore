@@ -1,0 +1,7 @@
+/target
+/logs
+/docs/superpowers
+.claude
+
+CLAUDE.md
+Cargo.lock

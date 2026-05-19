@@ -1,0 +1,224 @@
+# =============================================================
+# tracing.toml — tracing-config 配置文件
+# formatter type: "default" | "logback" | "log4j"（待扩展）
+# =============================================================
+
+
+# -------------------------------------------------------------
+# [global] 全局设置
+# -------------------------------------------------------------
+[global]
+# 全局最低日志级别: trace | debug | info | warn | error | off
+level = "info"
+
+# 是否启用 ANSI 颜色（终端输出时生效）
+ansi = true
+
+# span 事件捕获策略: none | new | enter | exit | close | full
+span_events = "none"
+
+
+# -------------------------------------------------------------
+# [filter] 精细化过滤（兼容 RUST_LOG / env_filter 语法）
+# -------------------------------------------------------------
+[filter]
+default_level = "info"
+directives = [
+    "my_app=debug",
+    "my_app::db=trace",
+    "hyper=warn",
+    "tokio=warn",
+    "h2=off",
+]
+
+
+# -------------------------------------------------------------
+# [[appender]] 输出目标（数组，可配置多个）
+# -------------------------------------------------------------
+
+# ── 1. 控制台 stdout（default formatter）───────────────────
+[[appender]]
+name    = "stdout"
+kind    = "stdout"
+enabled = true
+
+[appender.formatter]
+type        = "default"
+compact     = false   # true → compact 单行
+pretty      = false   # true → pretty 多行
+json        = false   # true → JSON 结构化（与 compact/pretty 互斥）
+with_target = true
+with_file   = false
+with_line   = false
+with_thread = false
+with_level  = true
+with_time   = true
+time_format = "%Y-%m-%dT%H:%M:%S%.3f"
+
+
+# ── 2. 控制台 stdout（logback formatter，带颜色）────────────
+[[appender]]
+name    = "stdout-logback"
+kind    = "stdout"
+enabled = false
+
+[appender.formatter]
+type    = "logback"
+# %highlight() 根据级别自动着色；%clr(){color} 固定颜色
+# 效果形如：10:23:45.123 [INFO ] [main              ] com.example.App - Hello
+pattern = "%clr(%d{HH:mm:ss.SSS}){faint} %highlight(%5level) %clr([%-18.18t]){cyan} %clr(%-40.40logger{39}){cyan} - %msg%n%ex"
+
+
+# ── 3. 固定文件输出 ────────────────────────────────────────
+[[appender]]
+name    = "file"
+kind    = "file"
+enabled = true
+path    = "logs/app.log"
+append  = true
+
+[appender.formatter]
+type    = "logback"
+# 经典 logback 风格：日期 级别 线程 logger 消息 异常
+pattern = "%d{yyyy-MM-dd HH:mm:ss.SSS} %5level [%15.15t] %-40.40logger{39} : %msg%n%ex"
+
+
+# ── 4. 滚动文件输出 ────────────────────────────────────────
+[[appender]]
+name      = "rolling"
+kind      = "rolling_file"
+enabled   = true
+dir       = "logs"
+prefix    = "app"
+suffix    = "log"
+rotation  = "daily"     # daily | hourly | size | never
+max_size  = 104857600   # 仅 rotation="size" 有效，100 MiB
+max_files = 7
+level     = "warn"      # 单独覆盖该 appender 的日志级别
+
+[appender.formatter]
+type    = "logback"
+# 无颜色、含 MDC 字段（span fields）、异常堆栈深度限 5
+pattern = "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%t] %logger{36} %X - %msg%n%ex{5}"
+
+
+# ── 5. stderr（仅 error 级别）──────────────────────────────
+[[appender]]
+name    = "stderr"
+kind    = "stderr"
+enabled = false
+level   = "error"
+
+[appender.formatter]
+type    = "logback"
+pattern = "%d{HH:mm:ss.SSS} %highlight(%5level) %logger{36} - %msg%n%rEx"
+
+
+# -------------------------------------------------------------
+# [sampling] 采样限流（高流量场景）
+# -------------------------------------------------------------
+[sampling]
+enabled         = false
+rate_per_second = 1000
+
+
+# -------------------------------------------------------------
+# [opentelemetry] OpenTelemetry 集成（可选）
+# -------------------------------------------------------------
+[opentelemetry]
+enabled         = false
+endpoint        = "http://localhost:4317"
+service_name    = "my-service"
+service_version = "0.1.0"
+
+
+# =============================================================
+# Logback 转换词完整说明（完全对齐 logback conversion words）
+# =============================================================
+#
+# 格式修饰语法（同 logback）：
+#   %[flag][minWidth][.maxWidth]keyword{option}
+#   flag:     - 左对齐（默认右对齐）
+#   minWidth: 不足时补空格
+#   maxWidth: 超出时从左截断（默认），加 - 后缀则从右截断
+#   {option}: 关键字专属参数，见下表
+#
+# ┌─────────────────────────────┬───────────────────────────────────────────────────────┬───────────────────────────────┐
+# │ 关键字（别名）               │ 说明                                                   │ 示例                          │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %d{pattern}                 │ 时间戳，pattern 为 strftime/Java SimpleDateFormat 格式  │ 2024-01-15 10:30:00.123       │
+# │ %date{pattern}              │ 同 %d                                                  │                               │
+# │                             │ 支持 'T' 'Z' 等字面量（用单引号包裹）                    │ %d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %r                          │ 应用启动至今的毫秒数（relative time）                    │ 1023                          │
+# │ %relative                   │ 同 %r                                                  │                               │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %level                      │ 日志级别（原始大小写）                                   │ INFO                          │
+# │ %le / %p                    │ 同 %level                                              │                               │
+# │ %5level                     │ 右对齐，最小宽度 5                                      │ " INFO"                       │
+# │ %-5level                    │ 左对齐，最小宽度 5                                      │ "INFO "                       │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %t                          │ 线程名称                                                │ tokio-runtime-worker-0        │
+# │ %thread                     │ 同 %t                                                  │                               │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %logger{length}             │ target/模块路径；{length} 触发缩写算法                   │ com.example.App → c.e.App     │
+# │ %lo{length} / %c{length}    │ 同 %logger                                             │ %logger{36} 保留末段完整       │
+# │                             │ {0} = 仅最后一段                                        │ %logger{0} → App              │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %msg                        │ 日志消息正文                                             │ user logged in                │
+# │ %m / %message               │ 同 %msg                                                │                               │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %n                          │ 平台相关换行符（\n 或 \r\n）                             │                               │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %ex{depth}                  │ 事件中的 error 字段/cause 链；{depth} 限制帧数            │ Error: xxx\n  at ...           │
+# │ %exception{depth}           │ 同 %ex                                                 │ %ex{5} 最多 5 帧               │
+# │ %throwable{depth}           │ 同 %ex                                                 │                               │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %rEx{depth}                 │ 同 %ex，附带 crate 版本信息（root exception）            │                               │
+# │ %rootException{depth}       │ 同 %rEx                                                │                               │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %nopex / %nopexception      │ 抑制异常输出（覆盖默认的自动追加行为）                     │                               │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %X{key}                     │ span field 中指定 key 的值（对应 logback MDC）           │ %X{request_id} → abc-123      │
+# │ %mdc{key}                   │ 同 %X{key}                                             │                               │
+# │ %X                          │ 所有 span fields，格式 {k1=v1, k2=v2}                  │                               │
+# │ %mdc                        │ 同 %X                                                  │                               │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %kvp                        │ 结构化键值对（tracing event fields，非 span fields）      │ key1=val1 key2=val2            │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %marker / %mk               │ Marker 名称（需在事件中通过 field 传递）                  │ SECURITY                      │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %C{length}                  │ 模块路径（caller class），同 %logger                     │ my_app::handler               │
+# │ %class{length}              │ 同 %C                                                  │                               │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %M / %method                │ 最近 span 的名称（caller method 近似）                   │ handle_request                │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %L / %line                  │ 源码行号                                                │ 42                            │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %F / %file                  │ 源码文件名（不含路径）                                   │ main.rs                       │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %pid / %processId           │ 进程 ID                                                │ 12345                         │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ %%                          │ 字面量 %                                                │ %                             │
+# ├─────────────────────────────┼───────────────────────────────────────────────────────┼───────────────────────────────┤
+# │ 颜色转换词（需 ansi=true）   │                                                         │                               │
+# │ %highlight(sub-pattern)     │ 按级别自动着色（ERROR=红, WARN=黄, INFO=蓝, DEBUG=绿）    │ %highlight(%5level)           │
+# │ %clr(sub-pattern){color}    │ 固定颜色；color 见下                                    │ %clr(%d){faint}               │
+# │ %black %red %green          │ 直接着色关键字                                           │ %red(%msg)                    │
+# │ %yellow %blue %magenta      │ 同上                                                   │                               │
+# │ %cyan %white %faint         │ 同上                                                   │                               │
+# │ %bold %boldRed %boldGreen   │ 粗体系列                                                │                               │
+# │ %boldYellow %boldBlue       │ 同上                                                   │                               │
+# │ %boldMagenta %boldCyan      │ 同上                                                   │                               │
+# │ %boldWhite                  │ 同上                                                   │                               │
+# └─────────────────────────────┴───────────────────────────────────────────────────────┴───────────────────────────────┘
+#
+# %clr 支持的 {color} 值:
+#   black | red | green | yellow | blue | magenta | cyan | white
+#   boldBlack | boldRed | boldGreen | boldYellow | boldBlue
+#   boldMagenta | boldCyan | boldWhite | faint
+#
+# 日期格式 pattern 映射（Java SimpleDateFormat → strftime）：
+#   yyyy → %Y    MM → %m    dd → %d    HH → %H    mm → %M
+#   ss → %S      SSS → %.3f    XXX → %:z（时区偏移 +08:00）
+# =============================================================

@@ -1,0 +1,12 @@
+[global]
+level = "info"
+ansi = true
+
+[[appender]]
+name = "stdout"
+kind = "stdout"
+enabled = true
+
+[appender.formatter]
+type = "logback"
+pattern = "%highlight(%level) %logger - %msg%n"

@@ -237,16 +237,23 @@ fn parse_keyword(
                 let end = chars[pos..].iter().position(|&c| c == '}');
                 if let Some(end) = end {
                     let opt: String = chars[pos + 1..pos + end].iter().collect();
-                    return Ok((Keyword::Date, Some(opt), end + 2, false));
+                    return Ok((Keyword::Date, Some(opt), end + 1, false));
                 }
             }
-            Ok((Keyword::Date, None, 0, false))
+            Ok((Keyword::Date, None, 1, false))
         }
-        'D' => Ok((Keyword::Date, None, 0, false)),
-        'r' => Ok((Keyword::Relative, None, 0, false)),
+        'D' => Ok((Keyword::Date, None, 1, false)),
+        'r' => Ok((Keyword::Relative, None, 1, false)),
         'l' => {
-            // %logger or %level - distinguish by what follows
-            if pos + 6 <= chars.len()
+            // %logger or %level or %line - check what follows
+            if pos + 3 <= chars.len()
+                && chars[pos] == 'i'
+                && chars[pos + 1] == 'n'
+                && chars[pos + 2] == 'e'
+            {
+                // %line
+                Ok((Keyword::Line, None, 3, false))
+            } else if pos + 5 < chars.len()
                 && chars[pos] == 'o'
                 && chars[pos + 1] == 'g'
                 && chars[pos + 2] == 'g'
@@ -262,22 +269,67 @@ fn parse_keyword(
                     }
                 }
                 Ok((Keyword::Logger, None, 5, false))
-            } else if pos + 4 <= chars.len()
+            } else if pos + 3 < chars.len()
                 && chars[pos] == 'e'
                 && chars[pos + 1] == 'v'
                 && chars[pos + 2] == 'e'
                 && chars[pos + 3] == 'l'
             {
                 Ok((Keyword::Level, None, 4, false))
+            } else if pos < chars.len() && chars[pos] == 'e' {
+                // Partial "level" but not complete - still return Level
+                Ok((Keyword::Level, None, 1, false))
             } else {
-                Ok((Keyword::Level, None, 0, false))
+                Ok((Keyword::Logger, None, 1, false))
             }
         }
-        'L' => Ok((Keyword::Line, None, 0, false)),
-        'f' => Ok((Keyword::File, None, 0, false)),
-        'F' => Ok((Keyword::File, None, 0, false)),
-        'M' => Ok((Keyword::Method, None, 0, false)),
-        'p' => Ok((Keyword::Level, None, 0, false)),
+        'L' => {
+            // %line - uppercase
+            if pos + 2 < chars.len()
+                && chars[pos] == 'i'
+                && chars[pos + 1] == 'n'
+                && chars[pos + 2] == 'e'
+            {
+                Ok((Keyword::Line, None, 3, false))
+            } else {
+                Ok((Keyword::Line, None, 1, false))
+            }
+        }
+        'f' => {
+            // %file - only valid if followed by complete "ile"
+            if pos + 2 < chars.len()
+                && chars[pos] == 'i'
+                && chars[pos + 1] == 'l'
+                && chars[pos + 2] == 'e'
+            {
+                Ok((Keyword::File, None, 3, false))
+            } else {
+                Ok((Keyword::File, None, 1, false))
+            }
+        }
+        'F' => Ok((Keyword::File, None, 1, false)),
+        'M' => {
+            // %method - only valid if followed by complete "ethod"
+            if pos + 5 < chars.len()
+                && chars[pos] == 'e'
+                && chars[pos + 1] == 't'
+                && chars[pos + 2] == 'h'
+                && chars[pos + 3] == 'o'
+                && chars[pos + 4] == 'd'
+            {
+                Ok((Keyword::Method, None, 5, false))
+            } else {
+                Ok((Keyword::Method, None, 1, false))
+            }
+        }
+        'p' => {
+            // %pid - check if followed by "id" (2 more chars)
+            if pos + 1 < chars.len() && chars[pos] == 'i' && chars[pos + 1] == 'd' {
+                Ok((Keyword::Pid, None, 2, false))
+            } else {
+                Ok((Keyword::Level, None, 1, false))
+            }
+        }
         't' => {
             // %thread - check if followed by "hread" (5 more chars)
             if pos + 5 <= chars.len()
@@ -289,10 +341,10 @@ fn parse_keyword(
             {
                 Ok((Keyword::Thread, None, 5, false))
             } else {
-                Ok((Keyword::Thread, None, 0, false))
+                Ok((Keyword::Thread, None, 1, false))
             }
         }
-        'T' => Ok((Keyword::Thread, None, 0, false)),
+        'T' => Ok((Keyword::Thread, None, 1, false)),
         'm' => {
             // %msg or %m
             if pos < chars.len()
@@ -302,7 +354,7 @@ fn parse_keyword(
             {
                 Ok((Keyword::Message, None, 2, false))
             } else {
-                Ok((Keyword::Message, None, 0, false))
+                Ok((Keyword::Message, None, 1, false))
             }
         }
         'c' => {
@@ -314,9 +366,9 @@ fn parse_keyword(
                     return Ok((Keyword::Logger, Some(opt), end + 2, false));
                 }
             }
-            Ok((Keyword::Logger, None, 0, false))
+            Ok((Keyword::Logger, None, 1, false))
         }
-        'C' => Ok((Keyword::Class, None, 0, false)),
+        'C' => Ok((Keyword::Class, None, 1, false)),
         'X' => {
             // %X{...} or %X
             if pos < chars.len() && chars[pos] == '{' {
@@ -326,14 +378,14 @@ fn parse_keyword(
                     return Ok((Keyword::Mdc, Some(opt), end + 2, false));
                 }
             }
-            Ok((Keyword::Mdc, None, 0, false))
+            Ok((Keyword::Mdc, None, 1, false))
         }
         'k' => {
             // %kvp
             if pos + 1 < chars.len() && chars[pos] == 'v' && chars[pos + 1] == 'p' {
                 Ok((Keyword::Kvp, None, 2, false))
             } else {
-                Ok((Keyword::Kvp, None, 0, false))
+                Ok((Keyword::Kvp, None, 1, false))
             }
         }
         'e' => {
@@ -348,15 +400,22 @@ fn parse_keyword(
                 }
                 Ok((Keyword::Exception, None, 1, false))
             } else {
-                Ok((Keyword::Exception, None, 0, false))
+                Ok((Keyword::Exception, None, 1, false))
             }
         }
         'P' => {
-            // %pid
-            if pos + 1 < chars.len() && chars[pos] == 'i' && chars[pos + 1] == 'd' {
+            // %pid or %P
+            if pos < chars.len()
+                && chars[pos] == 'i'
+                && pos + 1 < chars.len()
+                && chars[pos + 1] == 'd'
+            {
                 Ok((Keyword::Pid, None, 2, false))
+            } else if pos < chars.len() && chars[pos] == 'i' {
+                // Partial "pid" but starts with 'i'
+                Ok((Keyword::Pid, None, 1, false))
             } else {
-                Ok((Keyword::Pid, None, 0, false))
+                Ok((Keyword::Pid, None, 1, false))
             }
         }
         'h' => {
@@ -381,7 +440,7 @@ fn parse_keyword(
                 })
             }
         }
-        's' => Ok((Keyword::Message, None, 0, false)),
+        's' => Ok((Keyword::Message, None, 1, false)),
         _ => Err(ConfigError::PatternParse {
             message: format!("unknown placeholder '%{}'", first_char),
             position: pos,
@@ -494,7 +553,7 @@ mod tests {
         let tokens = scan("%X{request_id}").unwrap();
         assert_eq!(tokens.len(), 1);
         assert!(matches!(
-            tokens[0],
+            &tokens[0],
             Token::Conversion {
                 keyword: Keyword::Mdc,
                 ..
@@ -503,5 +562,31 @@ mod tests {
         if let Token::Conversion { option, .. } = &tokens[0] {
             assert_eq!(option.as_deref(), Some("request_id"));
         }
+    }
+
+    #[test]
+    fn test_pid() {
+        let tokens = scan("%pid").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::Pid,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_line() {
+        let tokens = scan("%line").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::Line,
+                ..
+            }
+        ));
     }
 }

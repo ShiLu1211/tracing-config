@@ -1,68 +1,84 @@
-//! tracing-config — Declarative tracing initialization via `tracing.toml`.
+//! Hot-reload support for tracing configuration.
+//!
+//! Uses the `notify` crate to watch for changes to the tracing.toml file
+//! and automatically reinitialize the tracing subscriber when changes are detected.
 
+use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
-
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
 
-use crate::config::Config;
+use crate::config::Config as AppConfig;
 use crate::error::ConfigError;
 use crate::formatter::build_formatter;
 
-pub mod appender;
-pub mod config;
-pub mod error;
-pub mod formatter;
+static RELOADING: AtomicBool = AtomicBool::new(false);
 
-#[cfg(feature = "hot-reload")]
-pub mod hot_reload;
-
-pub mod sampling;
-
-pub mod windows;
-
-// Build-time version info injected by build.rs
-include!(concat!(env!("OUT_DIR"), "/version.rs"));
-
-#[cfg(feature = "hot-reload")]
-pub use hot_reload::ReloadHandle;
-
-/// Initialize tracing from the default `tracing.toml` search path.
-pub fn init() -> Result<(), ConfigError> {
-    let config = Config::from_default_file()?;
-    init_with_config(config)
+pub struct ReloadHandle {
+    watcher: Mutex<RecommendedWatcher>,
+    path: std::path::PathBuf,
 }
 
-/// Initialize tracing from a specific file path.
-pub fn init_from_file(path: impl AsRef<Path>) -> Result<(), ConfigError> {
-    let config = Config::from_file(path)?;
-    init_with_config(config)
-}
+impl ReloadHandle {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
+        let path = path.as_ref().to_path_buf();
+        let path_clone = path.clone();
 
-/// Initialize tracing from a TOML string.
-pub fn init_from_str(content: &str) -> Result<(), ConfigError> {
-    let config: Config = toml::from_str(content)?;
-    init_with_config(config)
-}
+        let watcher = RecommendedWatcher::new(
+            move |res: Result<notify::Event, notify::Error>| {
+                let Ok(event) = res else { return };
+                if !matches!(
+                    event.kind,
+                    notify::EventKind::Create(_) | notify::EventKind::Modify(_)
+                ) {
+                    return;
+                }
+                if RELOADING
+                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_ok()
+                {
+                    let path_for_reload = path_clone.clone();
+                    std::thread::spawn(move || {
+                        if let Err(e) = reload_config(&path_for_reload) {
+                            eprintln!("Failed to reload config: {}", e);
+                        }
+                        RELOADING.store(false, Ordering::SeqCst);
+                    });
+                }
+            },
+            Config::default(),
+        )
+        .map_err(|e| ConfigError::InvalidConfig(format!("failed to create watcher: {}", e)))?;
 
-/// Parse configuration without initializing tracing.
-pub fn parse(content: &str) -> Result<Config, ConfigError> {
-    let config: Config = toml::from_str(content)?;
-    Ok(config)
-}
-
-/// Try to initialize tracing, ignoring errors if already initialized.
-pub fn try_init_from_str(content: &str) -> Result<(), ConfigError> {
-    let config: Config = toml::from_str(content)?;
-    init_with_config(config)
-}
-
-fn init_with_config(config: Config) -> Result<(), ConfigError> {
-    if tracing::dispatcher::has_been_set() {
-        return Ok(());
+        Ok(Self {
+            watcher: Mutex::new(watcher),
+            path,
+        })
     }
 
+    pub fn watch(&self) -> Result<(), ConfigError> {
+        self.watcher
+            .lock()
+            .unwrap()
+            .watch(&self.path, RecursiveMode::NonRecursive)
+            .map_err(|e| ConfigError::InvalidConfig(format!("failed to watch path: {}", e)))?;
+        Ok(())
+    }
+
+    pub fn reload(&self) -> Result<(), ConfigError> {
+        reload_config(&self.path)
+    }
+}
+
+fn reload_config(path: &Path) -> Result<(), ConfigError> {
+    let config = AppConfig::from_file(path)?;
+    init_with_config(config)?;
+    Ok(())
+}
+
+pub fn init_with_config(config: AppConfig) -> Result<(), ConfigError> {
     let env_filter = build_env_filter(&config)?;
 
     let enabled: Vec<_> = config.appenders.iter().filter(|a| a.enabled).collect();
@@ -88,7 +104,7 @@ fn init_with_config(config: Config) -> Result<(), ConfigError> {
 }
 
 fn init_single_appender(
-    env_filter: &EnvFilter,
+    env_filter: &tracing_subscriber::EnvFilter,
     appender_cfg: &crate::config::AppenderConfig,
 ) -> Result<(), ConfigError> {
     let formatter = build_formatter(&appender_cfg.formatter)?;
@@ -178,24 +194,17 @@ fn init_single_appender(
 }
 
 fn init_multi_appender(
-    env_filter: &EnvFilter,
+    env_filter: &tracing_subscriber::EnvFilter,
     appenders: &[&crate::config::AppenderConfig],
 ) -> Result<(), ConfigError> {
-    // Use a Vec of writers approach - write to multiple outputs
     use tracing_subscriber::fmt::writer::MakeWriterExt;
-
-    // For multi-appender, we need a custom writer that broadcasts to multiple outputs
-    // Simple approach: if we have stdout + file, use Tee
-    // Otherwise just use the first appender's writer
 
     let formatter = build_formatter(&appenders[0].formatter)?;
 
-    // Check if we have exactly stdout + file combo
     let has_stdout = appenders.iter().any(|a| a.kind == "stdout");
     let has_file = appenders.iter().any(|a| a.kind == "file");
 
     if has_stdout && has_file && appenders.len() == 2 {
-        // Use Tee to combine stdout and file
         let file_appender = appenders.iter().find(|a| a.kind == "file").unwrap();
         let path = file_appender
             .path
@@ -219,7 +228,6 @@ fn init_multi_appender(
             .try_init()
             .ok();
     } else {
-        // Fall back to first appender only (could be enhanced later)
         return Err(ConfigError::InvalidConfig(
             "multi-appender supported only for stdout+file combination".into(),
         ));
@@ -228,8 +236,7 @@ fn init_multi_appender(
     Ok(())
 }
 
-fn build_env_filter(config: &Config) -> Result<EnvFilter, ConfigError> {
-    // Use global.level as fallback, then filter directives
+fn build_env_filter(config: &AppConfig) -> Result<tracing_subscriber::EnvFilter, ConfigError> {
     let default_lvl = if config.filter.default_level.is_empty() {
         config.global.level.clone()
     } else {
@@ -244,5 +251,6 @@ fn build_env_filter(config: &Config) -> Result<EnvFilter, ConfigError> {
             .collect();
         all.join(",")
     };
-    EnvFilter::try_new(&filter_str).map_err(|e| ConfigError::InvalidConfig(e.to_string()))
+    tracing_subscriber::EnvFilter::try_new(&filter_str)
+        .map_err(|e| ConfigError::InvalidConfig(e.to_string()))
 }

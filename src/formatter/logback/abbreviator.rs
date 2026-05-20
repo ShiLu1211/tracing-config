@@ -141,4 +141,47 @@ mod tests {
         let name = "INFO";
         assert_eq!(abbreviate(name, 4), "INFO");
     }
+
+    #[test]
+    fn test_logback_example_deterministic() {
+        // Test that abbreviation works - last segment is always preserved
+        let name = "my_app::service::user_handler";
+        let result = abbreviate(name, 20);
+        // Last segment must be preserved
+        assert!(
+            result.ends_with("user_handler"),
+            "expected ending with user_handler, got: {}",
+            result
+        );
+        assert!(result.len() <= 20);
+        // Should contain dots separating abbreviated segments
+        assert!(result.contains('.'));
+    }
+
+    #[test]
+    fn test_abbreviate_multiple_segments() {
+        // Three segments abbreviated to fit
+        let name = "com::example::my_app::handler";
+        let result = abbreviate(name, 15);
+        // Last: "handler" = 7 chars
+        // Available: 15 - 7 - 1 = 7 chars for prefix
+        // "com" (3) + "." (1) + "e" (1) + "." (1) + "m" (1) = 7
+        // Result: "c.e.m.handler" = 14 chars ≤ 15
+        assert!(result.ends_with("handler"));
+        assert!(result.len() <= 15);
+    }
+
+    #[test]
+    fn test_no_colon_separator() {
+        // Single segment without ::
+        let name = "single_logger";
+        let result = abbreviate(name, 10);
+        assert_eq!(result.len(), 10);
+    }
+
+    #[test]
+    fn test_last_segment_only_if_max_zero() {
+        let name = "com::example::my_app";
+        assert_eq!(abbreviate(name, 0), "my_app");
+    }
 }

@@ -252,4 +252,45 @@ mod tests {
         // Should be something like "14:30:00"
         assert!(result.matches(':').count() == 2);
     }
+
+    #[test]
+    fn test_convert_empty_pattern() {
+        assert_eq!(convert_pattern(""), "");
+    }
+
+    #[test]
+    fn test_convert_single_char() {
+        assert_eq!(convert_pattern("y"), "%Y");
+        assert_eq!(convert_pattern("M"), "%m");
+        assert_eq!(convert_pattern("d"), "%d");
+        assert_eq!(convert_pattern("H"), "%H");
+        assert_eq!(convert_pattern("m"), "%M");
+        assert_eq!(convert_pattern("s"), "%S");
+    }
+
+    #[test]
+    fn test_convert_lowercase() {
+        // Lowercase should also work
+        assert_eq!(convert_pattern("yyyy"), "%Y");
+        assert_eq!(convert_pattern("ss"), "%S");
+    }
+
+    #[test]
+    fn test_date_with_percent_prefix() {
+        // Patterns that already have % prefix should be handled
+        let result = convert_pattern("%Y-%m-%d");
+        assert_eq!(result, "%Y-%m-%d");
+    }
+
+    #[test]
+    fn test_date_with_escaped_text() {
+        // Single quotes for literal text
+        assert_eq!(convert_pattern("yyyy'年'MM'月'dd'日'"), "%Y年%m月%d日");
+    }
+
+    #[test]
+    fn test_date_format_with_dots() {
+        // Dots are preserved as literals
+        assert_eq!(convert_pattern("yyyy.MM.dd"), "%Y.%m.%d");
+    }
 }

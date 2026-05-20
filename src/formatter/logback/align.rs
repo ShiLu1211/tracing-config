@@ -100,4 +100,46 @@ mod tests {
         assert_eq!(m.apply("WARNING"), "WARNI     "); // 5 chars + 5 spaces = 10
         assert_eq!(m.apply("INFO"), "INFO      "); // 4 chars + 6 spaces = 10
     }
+
+    #[test]
+    fn test_truncate_from_end() {
+        let m = FormatModifier {
+            left_align: false,
+            min_width: None,
+            max_width: Some(5),
+            max_from_end: true, // truncate from end
+        };
+        assert_eq!(m.apply("INFO"), "INFO");
+        // "WARNING" has 7 chars, last 5 = "RNING"
+        assert_eq!(m.apply("WARNING"), "RNING");
+    }
+
+    #[test]
+    fn test_max_equals_min() {
+        let m = FormatModifier {
+            left_align: false,
+            min_width: Some(5),
+            max_width: Some(5),
+            max_from_end: false,
+        };
+        assert_eq!(m.apply("HELLO"), "HELLO");
+        assert_eq!(m.apply("HI"), "   HI");
+    }
+
+    #[test]
+    fn test_no_modifier() {
+        let m = FormatModifier::default();
+        assert_eq!(m.apply("UNCHANGED"), "UNCHANGED");
+    }
+
+    #[test]
+    fn test_empty_string_with_min_width() {
+        let m = FormatModifier {
+            left_align: true,
+            min_width: Some(5),
+            max_width: None,
+            max_from_end: false,
+        };
+        assert_eq!(m.apply(""), "     "); // 5 spaces
+    }
 }

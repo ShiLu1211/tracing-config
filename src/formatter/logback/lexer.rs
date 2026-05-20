@@ -221,12 +221,10 @@ fn parse_modifier(chars: &[char], start: usize) -> (Option<FormatModifier>, usiz
 }
 
 /// Parse a keyword from the character stream.
-/// Returns (Keyword, Option<String>, keyword_chars_consumed)
+/// Returns `(Keyword, Option<String>, keyword_chars_consumed, is_composite)` where
+/// `is_composite` is true for keywords that can have sub-patterns (highlight, clr, color words).
 /// The chars_consumed accounts for the keyword letters (e.g., "level" = 4, "thread" = 5)
 /// but NOT the option in braces (handled separately via position check).
-/// Parse a keyword from the character stream.
-/// Returns (Keyword, Option<String>, keyword_chars_consumed, is_composite)
-/// is_composite = true for keywords that can have sub-patterns (highlight, clr, color words)
 fn parse_keyword(
     first_char: char,
     chars: &[char],

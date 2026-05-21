@@ -64,6 +64,7 @@ fn init_with_config(config: Config) -> Result<(), ConfigError> {
     }
 
     let env_filter = build_env_filter(&config)?;
+    let sampling_config = &config.sampling;
 
     let enabled: Vec<_> = config.appenders.iter().filter(|a| a.enabled).collect();
 
@@ -77,10 +78,10 @@ fn init_with_config(config: Config) -> Result<(), ConfigError> {
         }
         1 => {
             let appender_cfg = enabled[0];
-            init_single_appender(&env_filter, appender_cfg)?;
+            init_single_appender(&env_filter, appender_cfg, sampling_config)?;
         }
         _ => {
-            init_multi_appender(&env_filter, &enabled)?;
+            init_multi_appender(&env_filter, &enabled, sampling_config)?;
         }
     }
 
@@ -90,26 +91,43 @@ fn init_with_config(config: Config) -> Result<(), ConfigError> {
 fn init_single_appender(
     env_filter: &EnvFilter,
     appender_cfg: &crate::config::AppenderConfig,
+    sampling_config: &crate::config::SamplingConfig,
 ) -> Result<(), ConfigError> {
     let formatter = build_formatter(&appender_cfg.formatter)?;
+    let rate = if sampling_config.enabled {
+        sampling_config.rate_per_second
+    } else {
+        0
+    };
+
     match appender_cfg.kind.as_str() {
         "stdout" => {
+            let writer = if rate > 0 {
+                sampling::SamplingWriter::new(std::io::stdout, rate)
+            } else {
+                sampling::SamplingWriter::new(std::io::stdout, 0)
+            };
             tracing_subscriber::registry()
                 .with(env_filter.clone())
                 .with(
                     tracing_subscriber::fmt::layer()
-                        .with_writer(std::io::stdout)
+                        .with_writer(writer)
                         .event_format(formatter),
                 )
                 .try_init()
                 .ok();
         }
         "stderr" => {
+            let writer = if rate > 0 {
+                sampling::SamplingWriter::new(std::io::stderr, rate)
+            } else {
+                sampling::SamplingWriter::new(std::io::stderr, 0)
+            };
             tracing_subscriber::registry()
                 .with(env_filter.clone())
                 .with(
                     tracing_subscriber::fmt::layer()
-                        .with_writer(std::io::stderr)
+                        .with_writer(writer)
                         .event_format(formatter),
                 )
                 .try_init()
@@ -124,11 +142,12 @@ fn init_single_appender(
                 .write(true)
                 .append(appender_cfg.append)
                 .open(path)?;
+            let writer = sampling::SamplingWriter::new(file, rate);
             tracing_subscriber::registry()
                 .with(env_filter.clone())
                 .with(
                     tracing_subscriber::fmt::layer()
-                        .with_writer(file)
+                        .with_writer(writer)
                         .event_format(formatter),
                 )
                 .try_init()
@@ -158,11 +177,12 @@ fn init_single_appender(
                 dir,
                 format!("{}.{}", prefix, suffix),
             );
+            let writer = sampling::SamplingWriter::new(appender, rate);
             tracing_subscriber::registry()
                 .with(env_filter.clone())
                 .with(
                     tracing_subscriber::fmt::layer()
-                        .with_writer(appender)
+                        .with_writer(writer)
                         .event_format(formatter),
                 )
                 .try_init()
@@ -180,22 +200,16 @@ fn init_single_appender(
 fn init_multi_appender(
     env_filter: &EnvFilter,
     appenders: &[&crate::config::AppenderConfig],
+    _sampling_config: &crate::config::SamplingConfig,
 ) -> Result<(), ConfigError> {
-    // Use a Vec of writers approach - write to multiple outputs
     use tracing_subscriber::fmt::writer::MakeWriterExt;
-
-    // For multi-appender, we need a custom writer that broadcasts to multiple outputs
-    // Simple approach: if we have stdout + file, use Tee
-    // Otherwise just use the first appender's writer
 
     let formatter = build_formatter(&appenders[0].formatter)?;
 
-    // Check if we have exactly stdout + file combo
     let has_stdout = appenders.iter().any(|a| a.kind == "stdout");
     let has_file = appenders.iter().any(|a| a.kind == "file");
 
     if has_stdout && has_file && appenders.len() == 2 {
-        // Use Tee to combine stdout and file
         let file_appender = appenders.iter().find(|a| a.kind == "file").unwrap();
         let path = file_appender
             .path
@@ -219,7 +233,6 @@ fn init_multi_appender(
             .try_init()
             .ok();
     } else {
-        // Fall back to first appender only (could be enhanced later)
         return Err(ConfigError::InvalidConfig(
             "multi-appender supported only for stdout+file combination".into(),
         ));

@@ -243,7 +243,22 @@ fn parse_keyword(
             Ok((Keyword::Date, None, 1, false))
         }
         'D' => Ok((Keyword::Date, None, 1, false)),
-        'r' => Ok((Keyword::Relative, None, 1, false)),
+        'r' => {
+            // %relative or %r
+            if pos + 7 <= chars.len()
+                && chars[pos] == 'e'
+                && chars[pos + 1] == 'l'
+                && chars[pos + 2] == 'a'
+                && chars[pos + 3] == 't'
+                && chars[pos + 4] == 'i'
+                && chars[pos + 5] == 'v'
+                && chars[pos + 6] == 'e'
+            {
+                Ok((Keyword::Relative, None, 8, false))
+            } else {
+                Ok((Keyword::Relative, None, 1, false))
+            }
+        }
         'l' => {
             // %logger or %level or %line - check what follows
             if pos + 3 <= chars.len()
@@ -346,8 +361,16 @@ fn parse_keyword(
         }
         'T' => Ok((Keyword::Thread, None, 1, false)),
         'm' => {
-            // %msg or %m
-            if pos < chars.len()
+            // %msg or %m or %marker
+            if pos + 5 <= chars.len()
+                && chars[pos] == 'a'
+                && chars[pos + 1] == 'r'
+                && chars[pos + 2] == 'k'
+                && chars[pos + 3] == 'e'
+                && chars[pos + 4] == 'r'
+            {
+                Ok((Keyword::Marker, None, 6, false))
+            } else if pos < chars.len()
                 && chars[pos] == 's'
                 && pos + 1 < chars.len()
                 && chars[pos + 1] == 'g'
@@ -358,7 +381,15 @@ fn parse_keyword(
             }
         }
         'c' => {
-            // %c{...} = logger
+            // %c or %class
+            if pos + 4 <= chars.len()
+                && chars[pos] == 'l'
+                && chars[pos + 1] == 'a'
+                && chars[pos + 2] == 's'
+                && chars[pos + 3] == 's'
+            {
+                return Ok((Keyword::Class, None, 5, false));
+            }
             if pos < chars.len() && chars[pos] == '{' {
                 let end = chars[pos..].iter().position(|&c| c == '}');
                 if let Some(end) = end {
@@ -368,7 +399,19 @@ fn parse_keyword(
             }
             Ok((Keyword::Logger, None, 1, false))
         }
-        'C' => Ok((Keyword::Class, None, 1, false)),
+        'C' => {
+            // %class or %C - full word is 5 chars after %
+            if pos + 4 <= chars.len()
+                && chars[pos] == 'l'
+                && chars[pos + 1] == 'a'
+                && chars[pos + 2] == 's'
+                && chars[pos + 3] == 's'
+            {
+                Ok((Keyword::Class, None, 5, false))
+            } else {
+                Ok((Keyword::Class, None, 1, false))
+            }
+        }
         'X' => {
             // %X{...} or %X
             if pos < chars.len() && chars[pos] == '{' {
@@ -389,16 +432,38 @@ fn parse_keyword(
             }
         }
         'e' => {
-            // %ex or %exception
+            // %ex or %exception or %xception
             if pos < chars.len() && chars[pos] == 'x' {
-                if pos + 1 < chars.len() && chars[pos + 1] == '{' {
-                    let end = chars[pos + 2..].iter().position(|&c| c == '}');
-                    if let Some(end) = end {
-                        let opt: String = chars[pos + 2..pos + 2 + end].iter().collect();
-                        return Ok((Keyword::Exception, Some(opt), end + 3, false));
+                // Check for full "exception" word (9 chars: x-c-e-p-t-i-o-n)
+                if pos + 8 <= chars.len()
+                    && chars[pos + 1] == 'c'
+                    && chars[pos + 2] == 'e'
+                    && chars[pos + 3] == 'p'
+                    && chars[pos + 4] == 't'
+                    && chars[pos + 5] == 'i'
+                    && chars[pos + 6] == 'o'
+                    && chars[pos + 7] == 'n'
+                {
+                    // Found "xception", check for {depth} option
+                    if pos + 8 < chars.len() && chars[pos + 8] == '{' {
+                        let end = chars[pos + 9..].iter().position(|&c| c == '}');
+                        if let Some(end) = end {
+                            let opt: String = chars[pos + 9..pos + 9 + end].iter().collect();
+                            return Ok((Keyword::Exception, Some(opt), end + 10, false));
+                        }
                     }
+                    Ok((Keyword::Exception, None, 9, false))
+                } else {
+                    // Not "exception", check for %ex{...}
+                    if pos + 1 < chars.len() && chars[pos + 1] == '{' {
+                        let end = chars[pos + 2..].iter().position(|&c| c == '}');
+                        if let Some(end) = end {
+                            let opt: String = chars[pos + 2..pos + 2 + end].iter().collect();
+                            return Ok((Keyword::Exception, Some(opt), end + 3, false));
+                        }
+                    }
+                    Ok((Keyword::Exception, None, 2, false))
                 }
-                Ok((Keyword::Exception, None, 1, false))
             } else {
                 Ok((Keyword::Exception, None, 1, false))
             }
@@ -587,6 +652,137 @@ mod tests {
                 keyword: Keyword::Line,
                 ..
             }
+        ));
+    }
+
+    #[test]
+    fn test_class() {
+        let tokens = scan("%class").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::Class,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_marker() {
+        let tokens = scan("%marker").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::Marker,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_relative() {
+        let tokens = scan("%relative").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::Relative,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_relative_short() {
+        let tokens = scan("%r").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::Relative,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_kvp() {
+        let tokens = scan("%kvp").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::Kvp,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_pid_uppercase() {
+        let tokens = scan("%P").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::Pid,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_file_uppercase() {
+        let tokens = scan("%F").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::File,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_exception() {
+        let tokens = scan("%ex").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::Exception,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_exception_full() {
+        let tokens = scan("%exception").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::Exception,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_exception_with_depth() {
+        let tokens = scan("%ex{3}").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::Exception,
+                option: Some(opt),
+                ..
+            } if opt == "3"
         ));
     }
 }

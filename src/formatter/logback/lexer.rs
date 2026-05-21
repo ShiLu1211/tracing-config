@@ -55,6 +55,7 @@ pub enum Keyword {
     // Exception
     Exception,
     RootException,
+    ExtendedException,
     NopException,
 
     // Process
@@ -113,7 +114,7 @@ pub fn scan(pattern: &str) -> Result<Vec<Token>, ConfigError> {
             continue;
         }
 
-        if spec_char == 'n' {
+        if spec_char == 'n' && (i >= chars.len() || (chars[i] != 'o' && chars[i] != 'e')) {
             tokens.push(Token::Newline);
             continue;
         }
@@ -244,19 +245,55 @@ fn parse_keyword(
         }
         'D' => Ok((Keyword::Date, None, 1, false)),
         'r' => {
-            // %relative or %r
-            if pos + 7 <= chars.len()
-                && chars[pos] == 'e'
-                && chars[pos + 1] == 'l'
-                && chars[pos + 2] == 'a'
-                && chars[pos + 3] == 't'
-                && chars[pos + 4] == 'i'
-                && chars[pos + 5] == 'v'
+            // %rEx or %rootException - check before %relative
+            if pos + 2 <= chars.len() && chars[pos] == 'E' && chars[pos + 1] == 'x' {
+                // %rEx{depth}?
+                if pos + 2 < chars.len() && chars[pos + 2] == '{' {
+                    let end = chars[pos + 3..].iter().position(|&c| c == '}');
+                    if let Some(end) = end {
+                        let opt: String = chars[pos + 3..pos + 3 + end].iter().collect();
+                        return Ok((Keyword::RootException, Some(opt), end + 4, false));
+                    }
+                }
+                Ok((Keyword::RootException, None, 3, false))
+            } else if pos + 12 <= chars.len()
+                && chars[pos] == 'o'
+                && chars[pos + 1] == 'o'
+                && chars[pos + 2] == 't'
+                && chars[pos + 3] == 'E'
+                && chars[pos + 4] == 'x'
+                && chars[pos + 5] == 'c'
                 && chars[pos + 6] == 'e'
+                && chars[pos + 7] == 'p'
+                && chars[pos + 8] == 't'
+                && chars[pos + 9] == 'i'
+                && chars[pos + 10] == 'o'
+                && chars[pos + 11] == 'n'
             {
-                Ok((Keyword::Relative, None, 8, false))
+                // %rootException{depth}?
+                if pos + 12 < chars.len() && chars[pos + 12] == '{' {
+                    let end = chars[pos + 13..].iter().position(|&c| c == '}');
+                    if let Some(end) = end {
+                        let opt: String = chars[pos + 13..pos + 13 + end].iter().collect();
+                        return Ok((Keyword::RootException, Some(opt), end + 14, false));
+                    }
+                }
+                Ok((Keyword::RootException, None, 13, false))
             } else {
-                Ok((Keyword::Relative, None, 1, false))
+                // %relative or %r
+                if pos + 7 <= chars.len()
+                    && chars[pos] == 'e'
+                    && chars[pos + 1] == 'l'
+                    && chars[pos + 2] == 'a'
+                    && chars[pos + 3] == 't'
+                    && chars[pos + 4] == 'i'
+                    && chars[pos + 5] == 'v'
+                    && chars[pos + 6] == 'e'
+                {
+                    Ok((Keyword::Relative, None, 8, false))
+                } else {
+                    Ok((Keyword::Relative, None, 1, false))
+                }
             }
         }
         'l' => {
@@ -432,9 +469,8 @@ fn parse_keyword(
             }
         }
         'e' => {
-            // %ex or %exception or %xception
+            // %ex or %exception
             if pos < chars.len() && chars[pos] == 'x' {
-                // Check for full "exception" word (9 chars: x-c-e-p-t-i-o-n)
                 if pos + 8 <= chars.len()
                     && chars[pos + 1] == 'c'
                     && chars[pos + 2] == 'e'
@@ -444,7 +480,6 @@ fn parse_keyword(
                     && chars[pos + 6] == 'o'
                     && chars[pos + 7] == 'n'
                 {
-                    // Found "xception", check for {depth} option
                     if pos + 8 < chars.len() && chars[pos + 8] == '{' {
                         let end = chars[pos + 9..].iter().position(|&c| c == '}');
                         if let Some(end) = end {
@@ -453,19 +488,107 @@ fn parse_keyword(
                         }
                     }
                     Ok((Keyword::Exception, None, 9, false))
-                } else {
-                    // Not "exception", check for %ex{...}
-                    if pos + 1 < chars.len() && chars[pos + 1] == '{' {
-                        let end = chars[pos + 2..].iter().position(|&c| c == '}');
-                        if let Some(end) = end {
-                            let opt: String = chars[pos + 2..pos + 2 + end].iter().collect();
-                            return Ok((Keyword::Exception, Some(opt), end + 3, false));
-                        }
+                } else if pos + 1 < chars.len() && chars[pos + 1] == '{' {
+                    let end = chars[pos + 2..].iter().position(|&c| c == '}');
+                    if let Some(end) = end {
+                        let opt: String = chars[pos + 2..pos + 2 + end].iter().collect();
+                        return Ok((Keyword::Exception, Some(opt), end + 3, false));
                     }
+                    Ok((Keyword::Exception, None, 2, false))
+                } else {
                     Ok((Keyword::Exception, None, 2, false))
                 }
             } else {
                 Ok((Keyword::Exception, None, 1, false))
+            }
+        }
+        'n' => {
+            // %nopex or %nopexception
+            // Check longer pattern first (nopexception = 11 chars after 'n')
+            if pos + 11 <= chars.len()
+                && chars[pos] == 'o'
+                && chars[pos + 1] == 'p'
+                && chars[pos + 2] == 'e'
+                && chars[pos + 3] == 'x'
+                && chars[pos + 4] == 'c'
+                && chars[pos + 5] == 'e'
+                && chars[pos + 6] == 'p'
+                && chars[pos + 7] == 't'
+                && chars[pos + 8] == 'i'
+                && chars[pos + 9] == 'o'
+                && chars[pos + 10] == 'n'
+            {
+                // %nopexception (11 chars after 'n')
+                Ok((Keyword::NopException, None, 12, false))
+            } else if pos + 4 <= chars.len()
+                && chars[pos] == 'o'
+                && chars[pos + 1] == 'p'
+                && chars[pos + 2] == 'e'
+                && chars[pos + 3] == 'x'
+            {
+                // %nopex (4 chars after 'n')
+                Ok((Keyword::NopException, None, 5, false))
+            } else {
+                Ok((Keyword::Message, None, 1, false))
+            }
+        }
+        'x' => {
+            // %xEx or %xException or %xThrowable
+            // After 'x' spec_char, chars[pos] is what follows (e.g., 'E' in xException)
+            if pos + 7 <= chars.len()
+                && chars[pos] == 'E'
+                && chars[pos + 1] == 'x'
+                && chars[pos + 2] == 'c'
+                && chars[pos + 3] == 'e'
+                && chars[pos + 4] == 'p'
+                && chars[pos + 5] == 't'
+                && chars[pos + 6] == 'i'
+                && chars[pos + 7] == 'o'
+            {
+                // %xException (8 chars after 'x')
+                if pos + 8 <= chars.len() && chars[pos + 8] == '{' {
+                    let end = chars[pos + 9..].iter().position(|&c| c == '}');
+                    if let Some(end) = end {
+                        let opt: String = chars[pos + 9..pos + 9 + end].iter().collect();
+                        return Ok((Keyword::ExtendedException, Some(opt), end + 10, false));
+                    }
+                }
+                Ok((Keyword::ExtendedException, None, 9, false))
+            } else if pos + 9 <= chars.len()
+                && chars[pos] == 'T'
+                && chars[pos + 1] == 'h'
+                && chars[pos + 2] == 'r'
+                && chars[pos + 3] == 'o'
+                && chars[pos + 4] == 'w'
+                && chars[pos + 5] == 'a'
+                && chars[pos + 6] == 'b'
+                && chars[pos + 7] == 'l'
+                && chars[pos + 8] == 'e'
+            {
+                // %xThrowable (9 chars after 'x': Throwable)
+                if pos + 9 < chars.len() && chars[pos + 9] == '{' {
+                    let end = chars[pos + 10..].iter().position(|&c| c == '}');
+                    if let Some(end) = end {
+                        let opt: String = chars[pos + 10..pos + 10 + end].iter().collect();
+                        return Ok((Keyword::ExtendedException, Some(opt), end + 11, false));
+                    }
+                }
+                Ok((Keyword::ExtendedException, None, 10, false))
+            } else if pos + 1 < chars.len() && chars[pos] == 'E' && chars[pos + 1] == 'x' {
+                // %xEx (2 chars after 'x')
+                if pos + 2 < chars.len() && chars[pos + 2] == '{' {
+                    let end = chars[pos + 3..].iter().position(|&c| c == '}');
+                    if let Some(end) = end {
+                        let opt: String = chars[pos + 3..pos + 3 + end].iter().collect();
+                        return Ok((Keyword::ExtendedException, Some(opt), end + 4, false));
+                    }
+                }
+                Ok((Keyword::ExtendedException, None, 3, false))
+            } else {
+                Err(ConfigError::PatternParse {
+                    message: "unknown placeholder '%x'".to_string(),
+                    position: pos,
+                })
             }
         }
         'P' => {
@@ -783,6 +906,125 @@ mod tests {
                 option: Some(opt),
                 ..
             } if opt == "3"
+        ));
+    }
+
+    #[test]
+    fn test_root_exception_short() {
+        let tokens = scan("%rEx").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::RootException,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_root_exception_full() {
+        let tokens = scan("%rootException").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::RootException,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_root_exception_with_depth() {
+        let tokens = scan("%rEx{5}").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::RootException,
+                option: Some(opt),
+                ..
+            } if opt == "5"
+        ));
+    }
+
+    #[test]
+    fn test_extended_exception_short() {
+        let tokens = scan("%xEx").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::ExtendedException,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_extended_exception_full() {
+        let tokens = scan("%xException").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::ExtendedException,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_extended_exception_throwable() {
+        let tokens = scan("%xThrowable").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::ExtendedException,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_extended_exception_with_depth() {
+        let tokens = scan("%xEx{10}").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::ExtendedException,
+                option: Some(opt),
+                ..
+            } if opt == "10"
+        ));
+    }
+
+    #[test]
+    fn test_nop_exception_short() {
+        let tokens = scan("%nopex").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::NopException,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_nop_exception_full() {
+        let tokens = scan("%nopexception").unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            &tokens[0],
+            Token::Conversion {
+                keyword: Keyword::NopException,
+                ..
+            }
         ));
     }
 }

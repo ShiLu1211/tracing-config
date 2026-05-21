@@ -160,7 +160,10 @@ impl LogbackFormatter {
                 buf
             }
             Keyword::Marker => String::new(),
-            Keyword::Exception | Keyword::RootException | Keyword::NopException => String::new(),
+            Keyword::Exception
+            | Keyword::RootException
+            | Keyword::ExtendedException
+            | Keyword::NopException => String::new(),
             Keyword::Pid => std::process::id().to_string(),
             Keyword::Highlight => {
                 // inner contains the rendered sub-pattern (e.g., "ERROR")
@@ -271,9 +274,10 @@ impl LogbackFormatter {
                         kv_buf
                     }
                     Keyword::Marker => String::new(),
-                    Keyword::Exception | Keyword::RootException | Keyword::NopException => {
-                        String::new()
-                    }
+                    Keyword::Exception
+                    | Keyword::RootException
+                    | Keyword::ExtendedException
+                    | Keyword::NopException => String::new(),
                     Keyword::Pid => std::process::id().to_string(),
                     Keyword::Highlight => {
                         if inner.is_empty() {

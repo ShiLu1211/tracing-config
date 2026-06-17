@@ -3,8 +3,8 @@
 use std::io;
 use std::sync::{Arc, Mutex};
 
-use tracing_config::formatter::log4j::{scan, Log4jFormatter};
-use tracing_config::span_fields::SpanFieldsLayer;
+use tracing_declarative::formatter::log4j::{scan, Log4jFormatter};
+use tracing_declarative::span_fields::SpanFieldsLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::EnvFilter;
 

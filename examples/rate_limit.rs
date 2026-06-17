@@ -23,7 +23,7 @@ pattern = "%d{%H:%M:%S} [%level] %msg%n"
     println!("Rate limiting example - limiting to 10 logs/second");
     println!("Watch for dropped messages when exceeding the rate.\n");
 
-    tracing_config::init_from_str(config).expect("failed to init tracing");
+    tracing_declarative::init_from_str(config).expect("failed to init tracing");
 
     println!("Attempting to log 20 messages rapidly...");
     for i in 0..20 {

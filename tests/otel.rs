@@ -1,7 +1,7 @@
 #[cfg(feature = "opentelemetry")]
 mod tests {
-    use tracing_config::config::OpentelemetryConfig;
-    use tracing_config::otel::build_otel_layer;
+    use tracing_declarative::config::OpentelemetryConfig;
+    use tracing_declarative::otel::build_otel_layer;
 
     #[test]
     fn test_build_otel_layer_with_defaults() {
@@ -56,7 +56,7 @@ name = "stdout"
 kind = "stdout"
 enabled = true
 "#;
-        let config: tracing_config::config::Config =
+        let config: tracing_declarative::config::Config =
             toml::from_str(toml).expect("parse should succeed");
         assert!(config.opentelemetry.enabled);
         assert_eq!(config.opentelemetry.endpoint, "http://localhost:4317");
@@ -70,7 +70,7 @@ enabled = true
 [global]
 level = "info"
 "#;
-        let config: tracing_config::config::Config =
+        let config: tracing_declarative::config::Config =
             toml::from_str(toml).expect("parse should succeed");
         assert!(!config.opentelemetry.enabled);
         assert!(config.opentelemetry.endpoint.is_empty());

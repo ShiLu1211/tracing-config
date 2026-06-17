@@ -5,8 +5,8 @@ use std::error::Error as StdError;
 use std::io;
 use std::sync::{Arc, Mutex};
 
-use tracing_config::formatter::logback::{scan, Keyword, LogbackFormatter, Token};
-use tracing_config::span_fields::SpanFieldsLayer;
+use tracing_declarative::formatter::logback::{scan, Keyword, LogbackFormatter, Token};
+use tracing_declarative::span_fields::SpanFieldsLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::EnvFilter;
 
@@ -110,7 +110,7 @@ fn rex_appends_package_info() {
         tracing::error!(error = &*err, "event");
     });
     assert!(out.contains("boom"), "got: {}", out);
-    assert!(out.contains("[tracing-config"), "got: {}", out);
+    assert!(out.contains("[tracing-declarative"), "got: {}", out);
     assert!(out.contains(env!("CARGO_PKG_VERSION")), "got: {}", out);
 }
 
@@ -190,7 +190,7 @@ fn clr_with_color_option_parses() {
 
 #[test]
 fn color_words_parse_as_composite() {
-    use tracing_config::formatter::logback::color::Color;
+    use tracing_declarative::formatter::logback::color::Color;
 
     for (pattern, expected) in [
         ("%red(%msg)", Color::Red),

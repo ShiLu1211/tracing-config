@@ -68,7 +68,7 @@ use crate::error::ConfigError;
 /// kind = "stdout"
 /// enabled = true
 /// "#;
-/// let parsed: tracing_config::config::Config = toml::from_str(config).unwrap();
+/// let parsed: tracing_declarative::config::Config = toml::from_str(config).unwrap();
 /// assert_eq!(parsed.global.level, "debug");
 /// ```
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -100,7 +100,7 @@ impl Config {
     /// # Example
     ///
     /// ```no_run
-    /// let config = tracing_config::config::Config::from_file("tracing.toml")
+    /// let config = tracing_declarative::config::Config::from_file("tracing.toml")
     ///     .expect("failed to load config");
     /// ```
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
@@ -122,7 +122,7 @@ impl Config {
     /// # Example
     ///
     /// ```no_run
-    /// let config = tracing_config::config::Config::from_default_file()
+    /// let config = tracing_declarative::config::Config::from_default_file()
     ///     .expect("config error");
     /// ```
     pub fn from_default_file() -> Result<Self, ConfigError> {
@@ -157,7 +157,7 @@ impl Config {
     /// # Example
     ///
     /// ```
-    /// let config = tracing_config::config::Config::builtin_default();
+    /// let config = tracing_declarative::config::Config::builtin_default();
     /// assert_eq!(config.global.level, "info");
     /// assert_eq!(config.appenders.len(), 1);
     /// assert_eq!(config.appenders[0].kind, "stdout");

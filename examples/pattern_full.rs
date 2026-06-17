@@ -14,7 +14,7 @@ type = "logback"
 pattern = "%d{%Y-%m-%d %H:%M:%S} [%level][%thread][%pid] %logger{36} %line - %msg%n"
 "#;
 
-    tracing_config::init_from_str(config).expect("failed to init");
+    tracing_declarative::init_from_str(config).expect("failed to init");
 
     tracing::info!("User logged in");
     tracing::debug!("Database query executed");

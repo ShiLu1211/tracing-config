@@ -1,5 +1,5 @@
 # =============================================================
-# tracing.toml — tracing-config 配置文件
+# tracing.toml — tracing-declarative 配置文件
 # formatter type: "default" | "logback" | "log4j"（待扩展）
 # =============================================================
 

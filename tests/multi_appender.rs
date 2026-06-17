@@ -1,8 +1,8 @@
 //! Tests for multi-appender combinations.
 
 use std::sync::{Arc, Mutex};
-use tracing_config::formatter::logback::{scan, LogbackFormatter};
-use tracing_config::span_fields::SpanFieldsLayer;
+use tracing_declarative::formatter::logback::{scan, LogbackFormatter};
+use tracing_declarative::span_fields::SpanFieldsLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::EnvFilter;
 

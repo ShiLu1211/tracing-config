@@ -6,7 +6,7 @@
 #[test]
 fn test_reload_handle_new() {
     use tempfile::TempDir;
-    use tracing_config::hot_reload::ReloadHandle;
+    use tracing_declarative::hot_reload::ReloadHandle;
 
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("tracing.toml");
@@ -27,7 +27,7 @@ level = "info"
 #[test]
 fn test_reload_handle_watch() {
     use tempfile::TempDir;
-    use tracing_config::hot_reload::ReloadHandle;
+    use tracing_declarative::hot_reload::ReloadHandle;
 
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("tracing.toml");
@@ -48,7 +48,7 @@ level = "info"
 #[test]
 fn test_reload_handle_reload() {
     use tempfile::TempDir;
-    use tracing_config::hot_reload::ReloadHandle;
+    use tracing_declarative::hot_reload::ReloadHandle;
 
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("tracing.toml");

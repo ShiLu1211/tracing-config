@@ -9,7 +9,7 @@
 //! # Example
 //!
 //! ```no_run
-//! tracing_config::windows::enable_ansi_escapes()
+//! tracing_declarative::windows::enable_ansi_escapes()
 //!     .expect("failed to enable ANSI escapes");
 //! ```
 
@@ -20,7 +20,7 @@
 /// # Example
 ///
 /// ```no_run
-/// tracing_config::windows::enable_ansi_escapes()
+/// tracing_declarative::windows::enable_ansi_escapes()
 ///     .expect("failed to enable ANSI escapes");
 /// ```
 #[cfg(windows)]
@@ -57,7 +57,7 @@ pub fn enable_ansi_escapes() -> Result<(), Box<dyn std::error::Error + Send + Sy
 /// # Example
 ///
 /// ```
-/// tracing_config::windows::enable_ansi_escapes()
+/// tracing_declarative::windows::enable_ansi_escapes()
 ///     .expect("failed to enable ANSI escapes");
 /// ```
 #[cfg(not(windows))]

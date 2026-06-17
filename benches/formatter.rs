@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use tracing_config::formatter::log4j::lexer::scan as log4j_scan;
-use tracing_config::formatter::logback::lexer::scan as logback_scan;
+use tracing_declarative::formatter::log4j::lexer::scan as log4j_scan;
+use tracing_declarative::formatter::logback::lexer::scan as logback_scan;
 
 fn bench_lexer(c: &mut Criterion) {
     let logback_pattern = "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n";
@@ -39,7 +39,7 @@ fn bench_date_format(c: &mut Criterion) {
         let java_fmt = "yyyy-MM-dd HH:mm:ss.SSS";
         b.iter(|| {
             let chrono_fmt =
-                tracing_config::formatter::logback::date::convert_pattern(black_box(java_fmt));
+                tracing_declarative::formatter::logback::date::convert_pattern(black_box(java_fmt));
             let s = chrono::Local::now().format(&chrono_fmt).to_string();
             black_box(s);
         });
@@ -53,7 +53,7 @@ fn bench_abbreviator(c: &mut Criterion) {
 
     c.bench_function("logback_abbreviate_20", |b| {
         b.iter(|| {
-            let s = tracing_config::formatter::logback::abbreviator::abbreviate(
+            let s = tracing_declarative::formatter::logback::abbreviator::abbreviate(
                 black_box(name),
                 black_box(20),
             );
@@ -63,7 +63,7 @@ fn bench_abbreviator(c: &mut Criterion) {
 
     c.bench_function("log4j_abbreviate_2", |b| {
         b.iter(|| {
-            let s = tracing_config::formatter::log4j::abbreviator::abbreviate(
+            let s = tracing_declarative::formatter::log4j::abbreviator::abbreviate(
                 black_box(name),
                 black_box(2),
             );

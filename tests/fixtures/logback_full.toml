@@ -4,7 +4,7 @@ ansi = true
 
 [filter]
 default_level = "info"
-directives = ["tracing_config=debug"]
+directives = ["tracing_declarative=debug"]
 
 [[appender]]
 name = "stdout"

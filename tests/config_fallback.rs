@@ -1,6 +1,6 @@
 //! Tests for `Config::from_default_file` and the built-in fallback.
 
-use tracing_config::config::Config;
+use tracing_declarative::config::Config;
 
 #[test]
 fn builtin_default_matches_spec() {

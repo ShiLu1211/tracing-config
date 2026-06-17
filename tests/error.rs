@@ -1,6 +1,6 @@
 //! Tests for error types.
 
-use tracing_config::error::ConfigError;
+use tracing_declarative::error::ConfigError;
 
 #[test]
 fn test_invalid_config_error() {

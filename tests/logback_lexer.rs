@@ -1,6 +1,6 @@
 //! Logback lexer tests - boundary cases for token parsing.
 
-use tracing_config::formatter::logback::{scan, Keyword, Token};
+use tracing_declarative::formatter::logback::{scan, Keyword, Token};
 
 #[test]
 fn test_empty_pattern() {

@@ -11,7 +11,7 @@
 //! ```rust
 //! use tracing_subscriber::layer::SubscriberExt;
 //! use tracing_subscriber::Registry;
-//! use tracing_config::span_fields::SpanFieldsLayer;
+//! use tracing_declarative::span_fields::SpanFieldsLayer;
 //!
 //! let subscriber = Registry::default()
 //!     .with(SpanFieldsLayer)
@@ -67,7 +67,7 @@ impl SpanFieldStore {
 /// ```rust
 /// use tracing_subscriber::layer::SubscriberExt;
 /// use tracing_subscriber::Registry;
-/// use tracing_config::span_fields::SpanFieldsLayer;
+/// use tracing_declarative::span_fields::SpanFieldsLayer;
 ///
 /// let subscriber = Registry::default()
 ///     .with(SpanFieldsLayer)

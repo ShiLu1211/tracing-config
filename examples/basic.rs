@@ -17,7 +17,7 @@ enabled = true
 type = "default"
 "#;
 
-    tracing_config::init_from_str(config).expect("failed to init tracing");
+    tracing_declarative::init_from_str(config).expect("failed to init tracing");
 
     tracing::info!("hello from tracing-config");
     tracing::warn!("this is a warning");

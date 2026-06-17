@@ -30,7 +30,7 @@ with_target = true
         log_path
     );
 
-    tracing_config::init_from_str(&config).expect("failed to init tracing");
+    tracing_declarative::init_from_str(&config).expect("failed to init tracing");
 
     println!("Logging to file: {}", log_path);
     println!("Check the file for log output after running.\n");

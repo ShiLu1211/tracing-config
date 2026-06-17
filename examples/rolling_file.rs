@@ -37,7 +37,7 @@ pattern = "%d{{%Y-%m-%d %H:%M:%S}} [%level][%thread] %logger - %msg%n"
         log_dir
     );
 
-    tracing_config::init_from_str(&config).expect("failed to init tracing");
+    tracing_declarative::init_from_str(&config).expect("failed to init tracing");
 
     println!("Logging to rolling file: {}/app.YYYYMMDD.log", log_dir);
     println!("Rotation: daily\n");

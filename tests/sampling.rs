@@ -1,6 +1,6 @@
 //! Tests for sampling/rate limiting functionality.
 
-use tracing_config::sampling::RateLimiter;
+use tracing_declarative::sampling::RateLimiter;
 
 #[test]
 fn test_rate_limiter_zero_rate_allows_all() {

@@ -1,13 +1,21 @@
 //! Hot reload example - demonstrates automatic config reload on file changes.
 //!
-//! This example requires the "hot-reload" feature (enabled by default).
+//! This example requires the "hot-reload" feature:
+//! `cargo run --example hot_reload --features hot-reload`
 //!
-//! Run this example, then edit the tracing.toml file in /tmp to see
-//! the logging configuration change in real-time.
+//! Note: hot-reload is currently unstable — `tracing` does not support
+//! re-initializing the global dispatcher. See docs/ROADMAP.md.
 
-use std::fs;
-
+#[cfg(not(feature = "hot-reload"))]
 fn main() {
+    eprintln!("This example requires the 'hot-reload' feature.");
+    eprintln!("Run: cargo run --example hot_reload --features hot-reload");
+}
+
+#[cfg(feature = "hot-reload")]
+fn main() {
+    use std::fs;
+
     let config_path = "/tmp/tracing-hot-reload.toml";
 
     let initial_config = r#"
@@ -31,7 +39,7 @@ type = "default"
     println!("Initial config: level=info");
     println!();
 
-    let handle = tracing_config::hot_reload::ReloadHandle::new(config_path)
+    let handle = tracing_declarative::hot_reload::ReloadHandle::new(config_path)
         .expect("failed to create reload handle");
 
     handle.watch().expect("failed to start watching");

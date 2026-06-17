@@ -11,8 +11,8 @@
 //! # Example
 //!
 //! ```rust
-//! use tracing_config::formatter::build_formatter;
-//! use tracing_config::config::FormatterConfig;
+//! use tracing_declarative::formatter::build_formatter;
+//! use tracing_declarative::config::FormatterConfig;
 //!
 //! let config = FormatterConfig {
 //!     typ: "logback".to_string(),
@@ -85,8 +85,8 @@ where
 /// # Example
 ///
 /// ```rust
-/// use tracing_config::formatter::build_formatter;
-/// use tracing_config::config::FormatterConfig;
+/// use tracing_declarative::formatter::build_formatter;
+/// use tracing_declarative::config::FormatterConfig;
 ///
 /// let config = FormatterConfig {
 ///     typ: "log4j".to_string(),

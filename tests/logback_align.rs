@@ -1,6 +1,6 @@
 //! Logback align tests - boundary cases for format modifier.
 
-use tracing_config::formatter::logback::align::FormatModifier;
+use tracing_declarative::formatter::logback::align::FormatModifier;
 
 #[test]
 fn test_min_equals_max() {

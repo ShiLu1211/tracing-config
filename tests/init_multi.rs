@@ -36,7 +36,7 @@ pattern = "[%level] %msg%n"
 "#,
         log_path.display()
     );
-    tracing_config::try_init_from_str(&config).expect("failed to init");
+    tracing_declarative::try_init_from_str(&config).expect("failed to init");
 }
 
 #[test]
@@ -71,7 +71,7 @@ pattern = "%d %level %msg%n"
 "#,
         dir.path().display()
     );
-    tracing_config::try_init_from_str(&config).expect("failed to init");
+    tracing_declarative::try_init_from_str(&config).expect("failed to init");
 }
 
 #[test]
@@ -111,5 +111,5 @@ pattern = "[file] %msg%n"
 "#,
         log_path.display()
     );
-    tracing_config::try_init_from_str(&config).expect("failed to init");
+    tracing_declarative::try_init_from_str(&config).expect("failed to init");
 }

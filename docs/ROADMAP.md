@@ -1,6 +1,6 @@
-# tracing-config 路线图
+# tracing-declarative 路线图
 
-> 最后更新：2026-06-17 · 版本：0.1.0 → v1.0.0 完成
+> 最后更新：2026-06-17 · 当前版本：0.1.0（未发布）· 目标版本：v1.0.0
 
 本文档基于当前代码库的实际完成状态，规划后续开发优先级和里程碑。
 
@@ -82,20 +82,61 @@
 | D7 | multi-appender 只取第一个 formatter | ✅ 已解决 | M1.5 MultiMakeWriter 泛化 |
 | D8 | `tracing-test` / `strip-ansi-escapes` 未在 Cargo.toml | ✅ 已解决 | 已添加 |
 | D9 | `try_init_from_str` 与 `init_from_str` 行为一致 | ✅ 已解决 | deprecated 标记 |
+| D10 | 包名 `tracing-declarative` 与 crates.io 已有 crate 冲突 | 🔴 待解决 | 重命名为 `tracing-declarative`，见 RELEASE-PLAN.md |
+| D11 | Cargo.toml 缺少 crates.io 必需元数据 | 🔴 待解决 | description / license / repository 等，见 RELEASE-PLAN.md |
+| D12 | 缺少 LICENSE 文件 | 🔴 待解决 | 需添加 LICENSE-MIT + LICENSE-APACHE |
+| D13 | README.md 过时描述 | 🟡 待修复 | log4j "planned" 实际已完成 |
+| D14 | hot-reload 作为 default feature | 🟡 待修复 | unstable 功能不应默认开启 |
 
 ---
 
-## 后续可能的方向（v1.x）
+## 后续里程碑规划
 
-| 方向 | 优先级 | 说明 |
-|------|--------|------|
-| Hot Reload 基于 `reload::Layer` | 中 | 当前标记 unstable，需重新设计 |
-| `%M` / `%method` 取真实函数名 | 低 | 需宏配合，当前取最近 span 名 |
-| `%rEx` crate 版本信息构建时注入 | 低 | 需 build.rs 改进 |
-| Windows 彩色输出 `ENABLE_VIRTUAL_TERMINAL_PROCESSING` | 低 | 已有基本实现 |
-| 预编译 pattern 为渲染闭包 | 低 | 当前 token 遍历已足够快 |
-| `hot-reload` feature 基于 notify | 中 | 需 reload::Layer 先完成 |
-| `[sampling]` 限流逻辑完善 | 低 | 当前已可用 |
-| `formatter/log4j/` 更多转换符 | 低 | 核心已实现 |
-| size-based rolling file rotation | 中 | max_size 字段已预留 |
-| per-appender formatter（非共享第一个） | 中 | 当前架构限制 |
+### M5: v1.0.0 发布 — 包名变更 + 发版准备 🔴
+
+> 详见 [RELEASE-PLAN.md](./RELEASE-PLAN.md)
+
+- [ ] M5.1 包名重命名 `tracing-declarative` → `tracing-declarative`
+- [ ] M5.2 Cargo.toml 元数据补全
+- [ ] M5.3 添加 LICENSE 文件
+- [ ] M5.4 README.md 更新（移除过时描述，补充 log4j/otel/sampling）
+- [ ] M5.5 hot-reload 从 default feature 移出
+- [ ] M5.6 dry-run 验证通过
+- [ ] M5.7 正式发布到 crates.io
+
+### M6: v1.1.0 — 实用性增强
+
+- [ ] M6.1 Per-appender formatter — 每个 appender 独立格式化
+- [ ] M6.2 Size-based rolling file rotation — 接入 max_size / max_files
+- [ ] M6.3 Hot Reload 基于 `reload::Layer` 重构
+
+### M7: v1.2.0 — 开发体验
+
+- [ ] M7.1 YAML 配置支持（`serde_yaml` feature）
+- [ ] M7.2 环境变量插值（`${ENV_VAR}` 在 TOML 值中展开）
+- [ ] M7.3 配置校验增强（更友好的错误信息 + 字段路径提示）
+
+### M8: v1.3.0 — 高级功能
+
+- [ ] M8.1 `%M` 真实函数名（proc-macro `#[tracing_name]` 配合）
+- [ ] M8.2 `%rEx` crate 版本注入（扩展 build.rs 到依赖链）
+- [ ] M8.3 自定义 appender 注册（用户注册 `Box<dyn MakeWriter>` 工厂）
+
+---
+
+## 与已有 `tracing-declarative` crate 的差异
+
+crates.io 上的 [tracing-declarative v0.2.2](https://github.com/mateiandrei94/tracing-declarative) 功能相似但实现不同：
+
+| 维度 | tracing-declarative (已有) | tracing-declarative (本项目) |
+|------|----------------------|------------------------------|
+| 配置格式 | TOML | TOML（可扩展 YAML） |
+| Formatter 引擎 | 内置简单格式 | logback + log4j 双引擎，完整 conversion word |
+| Pattern 语法 | 无 | logback conversion words / log4j PatternLayout |
+| 多 Appender | 有限 | 任意组合 + per-appender level filter |
+| 颜色 | 无 | %highlight / %clr / 16 color words |
+| 异常链 | 无 | %ex / %rEx / %xEx，深度限制，隐式追加 |
+| Span 字段 | 无 | %X{key} / %mdc / %kvp |
+| OpenTelemetry | 无 | feature-gated OTLP 集成 |
+| Sampling | 无 | 令牌桶限流 |
+| 性能优化 | — | %d 预处理 2.5x，缓存优化 |

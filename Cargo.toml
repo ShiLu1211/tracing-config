@@ -1,10 +1,18 @@
 [package]
-name = "tracing-config"
-version = "0.1.0"
+name = "tracing-declarative"
+version = "1.0.0"
 edition = "2021"
+description = "Declarative tracing initialization via tracing.toml — logback/log4j patterns, multi-appender, OpenTelemetry"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/qqqqc/tracing-declarative"
+documentation = "https://docs.rs/tracing-declarative"
+readme = "README.md"
+keywords = ["tracing", "logging", "logback", "toml", "declarative"]
+categories = ["development-tools::debugging"]
+rust-version = "1.75"
 
 [features]
-default = ["hot-reload"]
+default = []
 hot-reload = ["dep:notify"]
 opentelemetry = [
     "dep:opentelemetry",
@@ -19,7 +27,7 @@ tracing-core = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
 tracing-appender = "0.2"
 serde = { version = "1", features = ["derive"] }
-toml = "1.1.2"
+toml = "1"
 chrono = { version = "0.4", features = ["clock"] }
 regex = "1"
 once_cell = "1"

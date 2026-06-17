@@ -36,7 +36,7 @@ enabled = true
 type = "default"
 "#;
 
-    tracing_config::init_from_str(config).expect("failed to init tracing");
+    tracing_declarative::init_from_str(config).expect("failed to init tracing");
 
     // Step 3: Log messages at different levels
     tracing::info!("hello from tracing-config");

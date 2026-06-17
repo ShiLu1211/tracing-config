@@ -1,6 +1,6 @@
 //! Logback color tests - ANSI color output verification.
 
-use tracing_config::formatter::logback::color::{level_color, with_color, Color, RESET};
+use tracing_declarative::formatter::logback::color::{level_color, with_color, Color, RESET};
 
 #[test]
 fn test_all_color_codes() {

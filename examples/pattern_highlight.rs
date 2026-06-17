@@ -14,7 +14,7 @@ type = "logback"
 pattern = "%highlight(%level) %logger - %msg%n"
 "#;
 
-    tracing_config::init_from_str(config).expect("failed to init");
+    tracing_declarative::init_from_str(config).expect("failed to init");
 
     println!("Log levels with color highlighting (colors may not display in all terminals):\n");
 

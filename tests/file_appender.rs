@@ -15,7 +15,7 @@ append = false
 [appender.formatter]
 type = "default"
 "#;
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     assert_eq!(parsed.appenders[0].kind, "file");
     assert_eq!(
         parsed.appenders[0].path.as_ref().unwrap(),
@@ -41,7 +41,7 @@ rotation = "daily"
 [appender.formatter]
 type = "default"
 "#;
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     assert_eq!(parsed.appenders[0].kind, "rolling_file");
     assert_eq!(parsed.appenders[0].dir.as_ref().unwrap(), "/tmp");
     assert_eq!(parsed.appenders[0].rotation.as_ref().unwrap(), "daily");

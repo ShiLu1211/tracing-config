@@ -3,13 +3,13 @@
 #[test]
 fn test_init_default() {
     let config = include_str!("fixtures/default.toml");
-    tracing_config::init_from_str(config).expect("failed to init tracing");
+    tracing_declarative::init_from_str(config).expect("failed to init tracing");
 }
 
 #[test]
 fn test_parse_default() {
     let config = include_str!("fixtures/default.toml");
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     assert_eq!(parsed.global.level, "info");
     assert_eq!(parsed.filter.default_level, "info");
     assert_eq!(parsed.appenders.len(), 1);
@@ -35,7 +35,7 @@ enabled = true
 type = "default"
 compact = true
 "#;
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     assert_eq!(parsed.global.level, "debug");
     assert_eq!(parsed.filter.directives.len(), 1);
 }
@@ -49,6 +49,6 @@ level = "warn"
 [filter]
 default_level = "warn"
 "#;
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     assert!(parsed.appenders.is_empty());
 }

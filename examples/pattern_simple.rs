@@ -14,7 +14,7 @@ type = "logback"
 pattern = "%level %logger - %msg%n"
 "#;
 
-    tracing_config::init_from_str(config).expect("failed to init");
+    tracing_declarative::init_from_str(config).expect("failed to init");
 
     tracing::info!("User logged in");
     tracing::warn!("Cache miss for key");

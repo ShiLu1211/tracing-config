@@ -5,7 +5,7 @@
 //! # Example
 //!
 //! ```
-//! use tracing_config::sampling::SamplingWriter;
+//! use tracing_declarative::sampling::SamplingWriter;
 //!
 //! // Wrap stdout with a 100 events/second rate limit
 //! let writer = SamplingWriter::new(std::io::stdout, 100);
@@ -36,7 +36,7 @@ impl<W> SamplingWriter<W> {
     /// # Example
     ///
     /// ```
-    /// use tracing_config::sampling::SamplingWriter;
+    /// use tracing_declarative::sampling::SamplingWriter;
     ///
     /// let writer = SamplingWriter::new(std::io::stdout, 100);
     /// ```
@@ -152,7 +152,7 @@ impl RateLimiter {
     /// # Example
     ///
     /// ```
-    /// use tracing_config::sampling::RateLimiter;
+    /// use tracing_declarative::sampling::RateLimiter;
     ///
     /// let limiter = RateLimiter::new(50);
     /// assert!(limiter.is_allowed());
@@ -170,7 +170,7 @@ impl RateLimiter {
     /// # Example
     ///
     /// ```
-    /// use tracing_config::sampling::RateLimiter;
+    /// use tracing_declarative::sampling::RateLimiter;
     ///
     /// let limiter = RateLimiter::new(0); // unlimited
     /// assert!(limiter.is_allowed());

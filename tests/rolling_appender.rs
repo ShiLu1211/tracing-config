@@ -19,7 +19,7 @@ rotation = "daily"
 [appender.formatter]
 type = "default"
 "#;
-    tracing_config::init_from_str(config).expect("failed to init");
+    tracing_declarative::init_from_str(config).expect("failed to init");
 }
 
 #[test]
@@ -44,6 +44,6 @@ type = "default"
         dir.path().display()
     );
 
-    tracing_config::init_from_str(&config).expect("failed to init");
+    tracing_declarative::init_from_str(&config).expect("failed to init");
     tracing::info!("test message");
 }

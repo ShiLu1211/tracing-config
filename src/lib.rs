@@ -25,7 +25,7 @@
 //! Then initialize in your `main`:
 //!
 //! ```no_run
-//! tracing_config::init().expect("tracing init failed");
+//! tracing_declarative::init().expect("tracing init failed");
 //! tracing::info!("application started");
 //! ```
 //!
@@ -108,7 +108,7 @@ use otel::build_otel_layer;
 /// # Example
 ///
 /// ```no_run
-/// tracing_config::init().expect("tracing init failed");
+/// tracing_declarative::init().expect("tracing init failed");
 /// tracing::info!("hello");
 /// ```
 ///
@@ -126,7 +126,7 @@ pub fn init() -> Result<(), ConfigError> {
 /// # Example
 ///
 /// ```no_run
-/// tracing_config::init_from_file("/etc/myapp/tracing.toml")
+/// tracing_declarative::init_from_file("/etc/myapp/tracing.toml")
 ///     .expect("tracing init failed");
 /// ```
 pub fn init_from_file(path: impl AsRef<Path>) -> Result<(), ConfigError> {
@@ -153,7 +153,7 @@ pub fn init_from_file(path: impl AsRef<Path>) -> Result<(), ConfigError> {
 /// [appender.formatter]
 /// type = "default"
 /// "#;
-/// tracing_config::init_from_str(config).expect("tracing init failed");
+/// tracing_declarative::init_from_str(config).expect("tracing init failed");
 /// ```
 pub fn init_from_str(content: &str) -> Result<(), ConfigError> {
     let config: Config = toml::from_str(content)?;
@@ -177,7 +177,7 @@ pub fn init_from_str(content: &str) -> Result<(), ConfigError> {
 /// kind = "stdout"
 /// enabled = true
 /// "#;
-/// let parsed = tracing_config::parse(config).expect("parse failed");
+/// let parsed = tracing_declarative::parse(config).expect("parse failed");
 /// assert_eq!(parsed.global.level, "info");
 /// assert_eq!(parsed.appenders.len(), 1);
 /// ```

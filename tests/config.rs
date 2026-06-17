@@ -10,7 +10,7 @@ level = "info"
 enabled = true
 rate_per_second = 500
 "#;
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     assert!(parsed.sampling.enabled);
     assert_eq!(parsed.sampling.rate_per_second, 500);
 }
@@ -21,7 +21,7 @@ fn test_sampling_config_defaults() {
 [global]
 level = "info"
 "#;
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     assert!(!parsed.sampling.enabled);
     assert_eq!(parsed.sampling.rate_per_second, 0);
 }
@@ -38,7 +38,7 @@ endpoint = "http://localhost:4317"
 service_name = "my-service"
 service_version = "1.0.0"
 "#;
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     assert!(parsed.opentelemetry.enabled);
     assert_eq!(parsed.opentelemetry.endpoint, "http://localhost:4317");
     assert_eq!(parsed.opentelemetry.service_name, "my-service");
@@ -51,7 +51,7 @@ fn test_opentelemetry_config_defaults() {
 [global]
 level = "info"
 "#;
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     assert!(!parsed.opentelemetry.enabled);
     assert!(parsed.opentelemetry.endpoint.is_empty());
 }
@@ -77,7 +77,7 @@ with_level = true
 with_time = true
 time_format = "%H:%M:%S"
 "#;
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     let formatter = &parsed.appenders[0].formatter;
     assert_eq!(formatter.typ, "default");
     assert!(formatter.compact);
@@ -98,7 +98,7 @@ level = "debug"
 ansi = false
 span_events = "new"
 "#;
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     assert_eq!(parsed.global.level, "debug");
     assert!(!parsed.global.ansi);
     assert_eq!(parsed.global.span_events, "new");
@@ -114,7 +114,7 @@ level = "info"
 default_level = "warn"
 directives = ["crate1=debug", "crate2=trace"]
 "#;
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     assert_eq!(parsed.filter.default_level, "warn");
     assert_eq!(parsed.filter.directives.len(), 2);
     assert_eq!(parsed.filter.directives[0], "crate1=debug");
@@ -131,7 +131,7 @@ name = "stdout"
 kind = "stdout"
 level = "debug"
 "#;
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     assert_eq!(parsed.appenders[0].level.as_ref().unwrap(), "debug");
 }
 
@@ -148,7 +148,7 @@ dir = "/tmp"
 max_size = 10485760
 max_files = 5
 "#;
-    let parsed = tracing_config::parse(config).expect("failed to parse");
+    let parsed = tracing_declarative::parse(config).expect("failed to parse");
     assert_eq!(parsed.appenders[0].max_size.unwrap(), 10485760);
     assert_eq!(parsed.appenders[0].max_files.unwrap(), 5);
 }

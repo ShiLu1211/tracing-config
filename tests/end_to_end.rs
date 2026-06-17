@@ -4,8 +4,8 @@ use std::error::Error as StdError;
 use std::io;
 use std::sync::{Arc, Mutex};
 
-use tracing_config::formatter::logback::{scan, Keyword, LogbackFormatter, Token};
-use tracing_config::span_fields::SpanFieldsLayer;
+use tracing_declarative::formatter::logback::{scan, Keyword, LogbackFormatter, Token};
+use tracing_declarative::span_fields::SpanFieldsLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::EnvFilter;
 
@@ -34,7 +34,7 @@ fn capture<F: FnOnce()>(pattern: &str, body: F) -> String {
 
 #[test]
 fn invalid_toml_returns_error() {
-    let result = tracing_config::parse(include_str!("fixtures/invalid.toml"));
+    let result = tracing_declarative::parse(include_str!("fixtures/invalid.toml"));
     assert!(result.is_err(), "expected parse error for invalid TOML");
 }
 
@@ -83,7 +83,7 @@ fn logback_pattern_with_exception_and_span_fields() {
 
 #[test]
 fn empty_appenders_list_uses_default_format() {
-    let cfg: tracing_config::config::Config = toml::from_str(
+    let cfg: tracing_declarative::config::Config = toml::from_str(
         r#"
 [global]
 level = "info"

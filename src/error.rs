@@ -7,9 +7,9 @@ use thiserror::Error;
 /// # Example
 ///
 /// ```
-/// use tracing_config::error::ConfigError;
+/// use tracing_declarative::error::ConfigError;
 ///
-/// let result = tracing_config::parse("not valid toml {{{");
+/// let result = tracing_declarative::parse("not valid toml {{{");
 /// match result {
 ///     Err(ConfigError::TomlParse(e)) => println!("TOML error: {e}"),
 ///     Err(ConfigError::InvalidConfig(msg)) => println!("invalid: {msg}"),

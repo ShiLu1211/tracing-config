@@ -1,4 +1,4 @@
-//! tracing-config — Declarative tracing initialization via `tracing.toml`.
+//! tracing-declarative — Declarative tracing initialization via `tracing.toml`.
 //!
 //! # Quick start
 //!

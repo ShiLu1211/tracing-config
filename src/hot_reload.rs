@@ -1,7 +1,18 @@
 //! Hot-reload support for tracing configuration.
 //!
-//! Uses the `notify` crate to watch for changes to the tracing.toml file
-//! and automatically reinitialize the tracing subscriber when changes are detected.
+//! **Status: unstable / best-effort.**
+//!
+//! The `tracing` global dispatcher is set once and cannot be
+//! replaced, so this module cannot truly re-initialize the subscriber
+//! on file change — `ReloadHandle::reload()` only has an effect if no
+//! dispatcher has been set yet. The `notify` watcher is wired up, but
+//! its callback path is a no-op for that reason.
+//!
+//! The proper fix is to rebase the whole appender stack on
+//! `tracing_subscriber::reload::Layer` so that layer swaps are
+//! possible after the initial `init()`. That refactor is tracked in
+//! `docs/ROADMAP.md` (M2.6). Until then, treat the `hot-reload`
+//! feature as a placeholder.
 
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
@@ -16,12 +27,16 @@ use crate::formatter::build_formatter;
 
 static RELOADING: AtomicBool = AtomicBool::new(false);
 
+/// Handle to a file watcher that can trigger config reload.
+///
+/// **Unstable:** see module-level docs for limitations.
 pub struct ReloadHandle {
     watcher: Mutex<RecommendedWatcher>,
     path: std::path::PathBuf,
 }
 
 impl ReloadHandle {
+    /// Create a new watcher for the given config file path.
     pub fn new(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let path = path.as_ref().to_path_buf();
         let path_clone = path.clone();
@@ -58,6 +73,7 @@ impl ReloadHandle {
         })
     }
 
+    /// Start watching the config file for changes.
     pub fn watch(&self) -> Result<(), ConfigError> {
         self.watcher
             .lock()
@@ -67,6 +83,7 @@ impl ReloadHandle {
         Ok(())
     }
 
+    /// Manually reload the config from the watched file.
     pub fn reload(&self) -> Result<(), ConfigError> {
         reload_config(&self.path)
     }
@@ -78,6 +95,10 @@ fn reload_config(path: &Path) -> Result<(), ConfigError> {
     Ok(())
 }
 
+/// Initialize tracing from a config (hot-reload variant).
+///
+/// **Unstable:** this is a simplified copy of `lib::init_with_config` and
+/// cannot truly re-initialize the global subscriber.
 pub fn init_with_config(config: AppConfig) -> Result<(), ConfigError> {
     let env_filter = build_env_filter(&config)?;
 

@@ -1,11 +1,28 @@
 //! Sampling/Rate limiting layer for tracing events.
 //!
 //! Implements a token bucket algorithm to limit the rate of trace events per appender.
+//!
+//! # Example
+//!
+//! ```
+//! use tracing_config::sampling::SamplingWriter;
+//!
+//! // Wrap stdout with a 100 events/second rate limit
+//! let writer = SamplingWriter::new(std::io::stdout, 100);
+//! // Or use rate_per_second = 0 to disable limiting
+//! let unlimited = SamplingWriter::new(std::io::stdout, 0);
+//! ```
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tracing_subscriber::fmt::writer::MakeWriter;
 
+/// A `MakeWriter` wrapper that applies token-bucket rate limiting.
+///
+/// When `rate_per_second` is 0, all events pass through (no limiting).
+/// Otherwise, the bucket refills once per second and each event consumes
+/// one token; events that arrive when the bucket is empty are silently
+/// dropped (the write succeeds but outputs nothing).
 pub struct SamplingWriter<W> {
     inner: W,
     rate_per_second: u64,
@@ -14,6 +31,15 @@ pub struct SamplingWriter<W> {
 }
 
 impl<W> SamplingWriter<W> {
+    /// Create a new sampling writer wrapping `inner` with the given rate.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tracing_config::sampling::SamplingWriter;
+    ///
+    /// let writer = SamplingWriter::new(std::io::stdout, 100);
+    /// ```
     pub fn new(inner: W, rate_per_second: u64) -> Self {
         Self {
             inner,
@@ -48,6 +74,10 @@ where
     }
 }
 
+/// The writer produced by `SamplingWriter` on each event.
+///
+/// If the rate limiter allows the event, writes are forwarded to the
+/// inner writer. Otherwise, writes are silently consumed.
 pub struct SamplingGuard<W> {
     inner: W,
     rate_per_second: u64,
@@ -106,6 +136,9 @@ where
     }
 }
 
+/// Standalone token-bucket rate limiter (not tied to a writer).
+///
+/// Useful when you need rate-limiting logic without the `MakeWriter` wrapper.
 pub struct RateLimiter {
     rate_per_second: u64,
     bucket: Arc<AtomicU64>,
@@ -113,6 +146,17 @@ pub struct RateLimiter {
 }
 
 impl RateLimiter {
+    /// Create a rate limiter that allows `rate_per_second` events per second.
+    /// A value of 0 disables limiting (all events pass).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tracing_config::sampling::RateLimiter;
+    ///
+    /// let limiter = RateLimiter::new(50);
+    /// assert!(limiter.is_allowed());
+    /// ```
     pub fn new(rate_per_second: u64) -> Self {
         Self {
             rate_per_second,
@@ -121,6 +165,16 @@ impl RateLimiter {
         }
     }
 
+    /// Returns `true` if the current event is allowed under the rate limit.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tracing_config::sampling::RateLimiter;
+    ///
+    /// let limiter = RateLimiter::new(0); // unlimited
+    /// assert!(limiter.is_allowed());
+    /// ```
     pub fn is_allowed(&self) -> bool {
         if self.rate_per_second == 0 {
             return true;

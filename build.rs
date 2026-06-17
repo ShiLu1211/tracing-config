@@ -12,7 +12,7 @@ fn main() {
     fs::write(
         &dest_path,
         format!(
-            "pub const CRATE_NAME: &str = \"{}\";\npub const CRATE_VERSION: &str = \"{}\";\n",
+            "/// Crate name (injected by build.rs).\npub const CRATE_NAME: &str = \"{}\";\n/// Crate version (injected by build.rs).\npub const CRATE_VERSION: &str = \"{}\";\n",
             name, version
         ),
     )

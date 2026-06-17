@@ -15,6 +15,7 @@ repos:
       - id: check-added-large-files
       - id: check-json
       - id: check-toml
+        exclude: ^tests/fixtures/invalid\.toml$
 
   # -------------------------
   # Python 格式化

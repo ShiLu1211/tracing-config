@@ -3,23 +3,34 @@
 use crate::error::ConfigError;
 
 use super::align::FormatModifier;
+use super::color::Color;
 
+/// A single token in a parsed logback pattern.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
+    /// Literal text (not a conversion word).
     Literal(String),
+    /// A conversion word with optional modifier, keyword, option, and sub-pattern.
     Conversion {
+        /// Format modifier (alignment / truncation).
         modifier: Option<FormatModifier>,
+        /// The conversion keyword.
         keyword: Keyword,
+        /// Optional parameter in `{…}` braces.
         option: Option<String>,
         /// Sub-pattern for composite converters like %highlight(%level)
         /// Each child token may itself be a Conversion with its own sub-patterns
         sub_pattern: Option<Vec<Token>>,
     },
-    Newline, // %n
-    Percent, // %%
+    /// Platform newline (`%n`).
+    Newline,
+    /// Literal percent sign (`%%`).
+    Percent,
 }
 
+/// Keyword identifying the type of a logback conversion word.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(missing_docs)]
 pub enum Keyword {
     // Time
     Date,
@@ -152,6 +163,18 @@ pub fn scan(pattern: &str) -> Result<Vec<Token>, ConfigError> {
             None
         };
 
+        // Check for an option that comes *after* a sub-pattern, e.g. the
+        // `{color}` part of `%clr(sub){red}`. The option returned from
+        // `parse_keyword` is overwritten if a post-option is found.
+        let mut option = option;
+        if i < chars.len() && chars[i] == '{' {
+            if let Some(end_offset) = chars[i..].iter().position(|&c| c == '}') {
+                let opt_str: String = chars[i + 1..i + end_offset].iter().collect();
+                option = Some(opt_str);
+                i += end_offset + 1;
+            }
+        }
+
         // If option was present in braces, it was already counted in kw_len for {..}
         // but for simple keywords we need to handle options separately
 
@@ -221,6 +244,48 @@ fn parse_modifier(chars: &[char], start: usize) -> (Option<FormatModifier>, usiz
     )
 }
 
+/// If `chars[spec_pos..]` starts with a color word followed by `(`,
+/// return the matching `Color` and the number of characters consumed
+/// *after* the spec_char (i.e. word length minus 1, since the spec_char
+/// itself is not counted in `kw_len`).
+fn try_parse_color_word(chars: &[char], spec_pos: usize) -> Option<(Color, usize)> {
+    const WORDS: &[(&str, Color)] = &[
+        ("red", Color::Red),
+        ("green", Color::Green),
+        ("yellow", Color::Yellow),
+        ("blue", Color::Blue),
+        ("magenta", Color::Magenta),
+        ("cyan", Color::Cyan),
+        ("white", Color::White),
+        ("faint", Color::Faint),
+        ("boldRed", Color::BoldRed),
+        ("boldGreen", Color::BoldGreen),
+        ("boldYellow", Color::BoldYellow),
+        ("boldBlue", Color::BoldBlue),
+        ("boldMagenta", Color::BoldMagenta),
+        ("boldCyan", Color::BoldCyan),
+        ("boldWhite", Color::BoldWhite),
+    ];
+
+    for (word, color) in WORDS {
+        let word_chars: Vec<char> = word.chars().collect();
+        // We want `chars[spec_pos..]` to equal `word + '('`.
+        if spec_pos + word_chars.len() + 1 > chars.len() {
+            continue;
+        }
+        if &chars[spec_pos..spec_pos + word_chars.len()] != word_chars.as_slice() {
+            continue;
+        }
+        if chars[spec_pos + word_chars.len()] != '(' {
+            continue;
+        }
+        // `kw_len` is the number of chars consumed *after* the spec_char,
+        // which is the word (minus its first char) + the `(`.
+        return Some((*color, word_chars.len()));
+    }
+    None
+}
+
 /// Parse a keyword from the character stream.
 /// Returns `(Keyword, Option<String>, keyword_chars_consumed, is_composite)` where
 /// `is_composite` is true for keywords that can have sub-patterns (highlight, clr, color words).
@@ -231,6 +296,13 @@ fn parse_keyword(
     chars: &[char],
     pos: usize,
 ) -> Result<(Keyword, Option<String>, usize, bool), ConfigError> {
+    // Color words (e.g. `%red(...)`, `%boldBlue(...)`) are checked first
+    // because several of them share their first letter with non-color
+    // keywords (r/m/c/f).
+    if let Some((color, len)) = try_parse_color_word(chars, pos.saturating_sub(1)) {
+        return Ok((Keyword::ColorWord(color), None, len, true));
+    }
+
     match first_char {
         'd' => {
             // %d{...} or %d
@@ -241,9 +313,9 @@ fn parse_keyword(
                     return Ok((Keyword::Date, Some(opt), end + 1, false));
                 }
             }
-            Ok((Keyword::Date, None, 1, false))
+            Ok((Keyword::Date, None, 0, false))
         }
-        'D' => Ok((Keyword::Date, None, 1, false)),
+        'D' => Ok((Keyword::Date, None, 0, false)),
         'r' => {
             // %rEx or %rootException - check before %relative
             if pos + 2 <= chars.len() && chars[pos] == 'E' && chars[pos + 1] == 'x' {
@@ -292,7 +364,7 @@ fn parse_keyword(
                 {
                     Ok((Keyword::Relative, None, 8, false))
                 } else {
-                    Ok((Keyword::Relative, None, 1, false))
+                    Ok((Keyword::Relative, None, 0, false))
                 }
             }
         }
@@ -330,9 +402,9 @@ fn parse_keyword(
                 Ok((Keyword::Level, None, 4, false))
             } else if pos < chars.len() && chars[pos] == 'e' {
                 // Partial "level" but not complete - still return Level
-                Ok((Keyword::Level, None, 1, false))
+                Ok((Keyword::Level, None, 0, false))
             } else {
-                Ok((Keyword::Logger, None, 1, false))
+                Ok((Keyword::Logger, None, 0, false))
             }
         }
         'L' => {
@@ -344,7 +416,7 @@ fn parse_keyword(
             {
                 Ok((Keyword::Line, None, 3, false))
             } else {
-                Ok((Keyword::Line, None, 1, false))
+                Ok((Keyword::Line, None, 0, false))
             }
         }
         'f' => {
@@ -356,10 +428,10 @@ fn parse_keyword(
             {
                 Ok((Keyword::File, None, 3, false))
             } else {
-                Ok((Keyword::File, None, 1, false))
+                Ok((Keyword::File, None, 0, false))
             }
         }
-        'F' => Ok((Keyword::File, None, 1, false)),
+        'F' => Ok((Keyword::File, None, 0, false)),
         'M' => {
             // %method - only valid if followed by complete "ethod"
             if pos + 5 < chars.len()
@@ -371,7 +443,7 @@ fn parse_keyword(
             {
                 Ok((Keyword::Method, None, 5, false))
             } else {
-                Ok((Keyword::Method, None, 1, false))
+                Ok((Keyword::Method, None, 0, false))
             }
         }
         'p' => {
@@ -379,7 +451,7 @@ fn parse_keyword(
             if pos + 1 < chars.len() && chars[pos] == 'i' && chars[pos + 1] == 'd' {
                 Ok((Keyword::Pid, None, 2, false))
             } else {
-                Ok((Keyword::Level, None, 1, false))
+                Ok((Keyword::Level, None, 0, false))
             }
         }
         't' => {
@@ -393,10 +465,10 @@ fn parse_keyword(
             {
                 Ok((Keyword::Thread, None, 5, false))
             } else {
-                Ok((Keyword::Thread, None, 1, false))
+                Ok((Keyword::Thread, None, 0, false))
             }
         }
-        'T' => Ok((Keyword::Thread, None, 1, false)),
+        'T' => Ok((Keyword::Thread, None, 0, false)),
         'm' => {
             // %msg or %m or %marker
             if pos + 5 <= chars.len()
@@ -414,10 +486,20 @@ fn parse_keyword(
             {
                 Ok((Keyword::Message, None, 2, false))
             } else {
-                Ok((Keyword::Message, None, 1, false))
+                Ok((Keyword::Message, None, 0, false))
             }
         }
         'c' => {
+            // %clr(sub) or %clr(sub){color} - composite colour wrapper
+            if pos + 2 < chars.len()
+                && chars[pos] == 'l'
+                && chars[pos + 1] == 'r'
+                && chars[pos + 2] == '('
+            {
+                // Consume "lr(" so the main loop sees `(` as the trigger
+                // for sub-pattern parsing.
+                return Ok((Keyword::Clr, None, 3, true));
+            }
             // %c or %class
             if pos + 4 <= chars.len()
                 && chars[pos] == 'l'
@@ -431,10 +513,10 @@ fn parse_keyword(
                 let end = chars[pos..].iter().position(|&c| c == '}');
                 if let Some(end) = end {
                     let opt: String = chars[pos + 1..pos + end].iter().collect();
-                    return Ok((Keyword::Logger, Some(opt), end + 2, false));
+                    return Ok((Keyword::Logger, Some(opt), end + 1, false));
                 }
             }
-            Ok((Keyword::Logger, None, 1, false))
+            Ok((Keyword::Logger, None, 0, false))
         }
         'C' => {
             // %class or %C - full word is 5 chars after %
@@ -446,7 +528,7 @@ fn parse_keyword(
             {
                 Ok((Keyword::Class, None, 5, false))
             } else {
-                Ok((Keyword::Class, None, 1, false))
+                Ok((Keyword::Class, None, 0, false))
             }
         }
         'X' => {
@@ -455,17 +537,17 @@ fn parse_keyword(
                 let end = chars[pos..].iter().position(|&c| c == '}');
                 if let Some(end) = end {
                     let opt: String = chars[pos + 1..pos + end].iter().collect();
-                    return Ok((Keyword::Mdc, Some(opt), end + 2, false));
+                    return Ok((Keyword::Mdc, Some(opt), end + 1, false));
                 }
             }
-            Ok((Keyword::Mdc, None, 1, false))
+            Ok((Keyword::Mdc, None, 0, false))
         }
         'k' => {
             // %kvp
             if pos + 1 < chars.len() && chars[pos] == 'v' && chars[pos + 1] == 'p' {
                 Ok((Keyword::Kvp, None, 2, false))
             } else {
-                Ok((Keyword::Kvp, None, 1, false))
+                Ok((Keyword::Kvp, None, 0, false))
             }
         }
         'e' => {
@@ -499,7 +581,7 @@ fn parse_keyword(
                     Ok((Keyword::Exception, None, 2, false))
                 }
             } else {
-                Ok((Keyword::Exception, None, 1, false))
+                Ok((Keyword::Exception, None, 0, false))
             }
         }
         'n' => {
@@ -529,7 +611,7 @@ fn parse_keyword(
                 // %nopex (4 chars after 'n')
                 Ok((Keyword::NopException, None, 5, false))
             } else {
-                Ok((Keyword::Message, None, 1, false))
+                Ok((Keyword::Message, None, 0, false))
             }
         }
         'x' => {
@@ -601,9 +683,9 @@ fn parse_keyword(
                 Ok((Keyword::Pid, None, 2, false))
             } else if pos < chars.len() && chars[pos] == 'i' {
                 // Partial "pid" but starts with 'i'
-                Ok((Keyword::Pid, None, 1, false))
+                Ok((Keyword::Pid, None, 0, false))
             } else {
-                Ok((Keyword::Pid, None, 1, false))
+                Ok((Keyword::Pid, None, 0, false))
             }
         }
         'h' => {
@@ -628,7 +710,7 @@ fn parse_keyword(
                 })
             }
         }
-        's' => Ok((Keyword::Message, None, 1, false)),
+        's' => Ok((Keyword::Message, None, 0, false)),
         _ => Err(ConfigError::PatternParse {
             message: format!("unknown placeholder '%{}'", first_char),
             position: pos,

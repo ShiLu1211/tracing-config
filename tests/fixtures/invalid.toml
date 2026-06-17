@@ -1,0 +1,2 @@
+[this is intentionally invalid TOML
+to exercise the error path

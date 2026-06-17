@@ -2,7 +2,27 @@
 //!
 //! On Windows 10+, ANSI escape codes are not enabled by default.
 //! This module provides functionality to enable Virtual Terminal Processing.
+//!
+//! This is called automatically by [`crate::init`] and related functions.
+//! You only need to call it manually if you are setting up tracing yourself.
+//!
+//! # Example
+//!
+//! ```no_run
+//! tracing_config::windows::enable_ansi_escapes()
+//!     .expect("failed to enable ANSI escapes");
+//! ```
 
+/// Enable ANSI virtual terminal processing on Windows 10+.
+///
+/// On non-Windows platforms this is a no-op that always returns `Ok(())`.
+///
+/// # Example
+///
+/// ```no_run
+/// tracing_config::windows::enable_ansi_escapes()
+///     .expect("failed to enable ANSI escapes");
+/// ```
 #[cfg(windows)]
 pub fn enable_ansi_escapes() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::ffi::OsStr;
@@ -30,6 +50,16 @@ pub fn enable_ansi_escapes() -> Result<(), Box<dyn std::error::Error + Send + Sy
     Ok(())
 }
 
+/// Enable ANSI virtual terminal processing on Windows 10+.
+///
+/// On non-Windows platforms this is a no-op that always returns `Ok(())`.
+///
+/// # Example
+///
+/// ```
+/// tracing_config::windows::enable_ansi_escapes()
+///     .expect("failed to enable ANSI escapes");
+/// ```
 #[cfg(not(windows))]
 pub fn enable_ansi_escapes() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())

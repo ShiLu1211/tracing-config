@@ -6,6 +6,12 @@ edition = "2021"
 [features]
 default = ["hot-reload"]
 hot-reload = ["dep:notify"]
+opentelemetry = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+    "dep:tracing-opentelemetry",
+]
 
 [dependencies]
 tracing = "0.1"
@@ -20,6 +26,15 @@ once_cell = "1"
 thiserror = "2"
 notify = { version = "8", features = ["macos_kqueue"], optional = true }
 parking_lot = "0.12"
+opentelemetry = { version = "0.32", optional = true }
+opentelemetry_sdk = { version = "0.32", optional = true }
+opentelemetry-otlp = { version = "0.32", features = ["trace", "http-proto", "reqwest-blocking-client"], optional = true }
+tracing-opentelemetry = { version = "0.33", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "formatter"
+harness = false

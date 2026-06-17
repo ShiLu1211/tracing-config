@@ -6,8 +6,9 @@
 //! - %red, %green, %yellow, %blue, %magenta, %cyan, %white, %faint
 //! - %boldRed, %boldGreen, etc.
 
-/// ANSI color codes
+/// ANSI color codes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(missing_docs)]
 pub enum Color {
     Black,
     Red,
@@ -74,6 +75,7 @@ impl Color {
     }
 }
 
+/// ANSI reset escape sequence.
 pub const RESET: &str = "\x1b[0m";
 
 /// Map a log level to its default highlight color.

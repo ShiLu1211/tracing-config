@@ -5,6 +5,41 @@ All notable changes to `tracing-declarative` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-06-18
+
+### Added
+
+- **`StackBuf<N>`** — stack-allocated buffer for modifier-bearing tokens,
+  eliminating heap `String` allocation on the hot path. Falls back to heap
+  when content exceeds 128 bytes.
+- **`abbreviate_to_writer()`** — zero-alloc variant of `abbreviate()` for both
+  logback and log4j, writing directly to `fmt::Write` without intermediate
+  `Vec` or `String` allocation.
+- **`SegIter`** — custom dual-delimiter iterator for log4j abbreviator,
+  eliminating the `replace("::", ".")` + `split('.').collect()` allocation.
+- **End-to-end benchmark suite** — `benches/e2e.rs` with 6 groups (B1-B6)
+  covering formatting, date, color, multi-appender, sampling, and config parsing.
+- **Benchmark documentation** — `docs/BENCHMARK.md`, `docs/BENCHMARK-PLAN.md`,
+  `docs/PERF-OPTIMIZATION.md`.
+
+### Changed
+
+- **`render_token()` modifier path** — uses `StackBuf<128>` instead of
+  `String::new()` for keyword output, with heap fallback on overflow.
+- **`TimestampCache::get()`** — fast path checks `last_millis` (u64 compare)
+  first; `chrono_fmt` stored as `Option<String>`, only allocated on change.
+- **`Keyword::Logger/Class`** — both renderers now call `abbreviate_to_writer()`
+  instead of `abbreviate()` + `write_str()`.
+- **B4 multi-appender benchmark** — uses `MakeNullWriter` to eliminate
+  `Arc<Mutex<Vec>>` lock contention from measurements.
+
+### Performance
+
+- logback simple: 9.77µs → 9.32µs (**-4.6%**, from 3.12x to 2.90x vs default)
+- log4j full: 11.55µs → 10.28µs (**-11.0%**, from 3.69x to 3.20x vs default)
+- Color words (`%cyan`): +0% overhead (unchanged)
+- `%highlight`: -30% vs pre-Phase-1
+
 ## [1.0.0] — 2026-06-17
 
 ### Added

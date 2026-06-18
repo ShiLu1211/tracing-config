@@ -12,6 +12,8 @@
 //! When the requested depth is `0` (or absent), only the last
 //! segment is kept — matching log4j default.
 
+use std::fmt;
+
 /// Apply log4j's `{n.}` abbreviation to a dotted / `::`-separated
 /// target string.
 ///
@@ -49,6 +51,97 @@ pub fn abbreviate(target: &str, depth: usize) -> String {
         }
     }
     out
+}
+
+/// Zero-alloc variant of [`abbreviate`] that writes directly to a `fmt::Write` target.
+pub fn abbreviate_to_writer(
+    target: &str,
+    depth: usize,
+    writer: &mut dyn fmt::Write,
+) -> fmt::Result {
+    if target.is_empty() {
+        return Ok(());
+    }
+
+    // Count segments using the dual delimiter iterator
+    let segments: Vec<&str> = SegIter::new(target).collect();
+    if segments.is_empty() {
+        return writer.write_str(target);
+    }
+    if depth == 0 {
+        return writer.write_str(segments.last().copied().unwrap_or(""));
+    }
+
+    let keep_from = segments.len().saturating_sub(depth);
+    for (i, seg) in segments.iter().enumerate() {
+        if i > 0 {
+            writer.write_str(".")?;
+        }
+        if i < keep_from {
+            if let Some(c) = seg.chars().next() {
+                write!(writer, "{}", c)?;
+            } else {
+                writer.write_str(seg)?;
+            }
+        } else {
+            writer.write_str(seg)?;
+        }
+    }
+    Ok(())
+}
+
+/// Iterator that splits a string on both `.` and `::` delimiters,
+/// yielding segments in order. This avoids the `replace("::", ".")`
+/// allocation.
+struct SegIter<'a> {
+    remaining: &'a str,
+}
+
+impl<'a> SegIter<'a> {
+    fn new(s: &'a str) -> Self {
+        Self { remaining: s }
+    }
+}
+
+impl<'a> Iterator for SegIter<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining.is_empty() {
+            return None;
+        }
+
+        // Find the next delimiter: either "::" or "."
+        // Look for "::" first (longer match), then "."
+        let pos = if let Some(p) = self.remaining.find("::") {
+            // Check if "." comes before "::"
+            if let Some(dp) = self.remaining.find('.') {
+                if dp < p {
+                    dp
+                } else {
+                    p
+                }
+            } else {
+                p
+            }
+        } else if let Some(p) = self.remaining.find('.') {
+            p
+        } else {
+            // No more delimiters
+            let seg = self.remaining;
+            self.remaining = "";
+            return Some(seg);
+        };
+
+        let seg = &self.remaining[..pos];
+        // Skip the delimiter: "." or "::"
+        if self.remaining[pos..].starts_with("::") {
+            self.remaining = &self.remaining[pos + 2..];
+        } else {
+            self.remaining = &self.remaining[pos + 1..];
+        }
+        Some(seg)
+    }
 }
 
 #[cfg(test)]

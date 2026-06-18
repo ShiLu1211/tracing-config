@@ -94,9 +94,29 @@ pub fn with_color(color: Color, s: &str) -> String {
     format!("{}{}{}", color.code(), s, RESET)
 }
 
+/// Write ANSI color codes + content directly to a `fmt::Write` target.
+pub fn with_color_to_writer(
+    color: Color,
+    s: &str,
+    writer: &mut dyn std::fmt::Write,
+) -> std::fmt::Result {
+    writer.write_str(color.code())?;
+    writer.write_str(s)?;
+    writer.write_str(RESET)
+}
+
 /// Wrap a string with level-based highlighting.
 pub fn highlight(level: tracing::Level, s: &str) -> String {
     with_color(level_color(&level), s)
+}
+
+/// Write level-based highlighting directly to a `fmt::Write` target.
+pub fn highlight_to_writer(
+    level: tracing::Level,
+    s: &str,
+    writer: &mut dyn std::fmt::Write,
+) -> std::fmt::Result {
+    with_color_to_writer(level_color(&level), s, writer)
 }
 
 #[cfg(test)]

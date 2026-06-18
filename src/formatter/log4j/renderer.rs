@@ -9,7 +9,7 @@ use tracing_subscriber::registry::LookupSpan;
 
 use super::super::logback::color;
 use super::super::logback::date;
-use super::super::logback::renderer::EventData;
+use super::super::logback::renderer::{EventData, THREAD_NAME, TS_CACHE};
 use super::lexer::{EscapeMode, Keyword, Token};
 
 use crate::span_fields::SpanFieldStore;
@@ -24,8 +24,9 @@ fn preprocess_date_tokens(tokens: &mut [Token]) {
                 sub_pattern,
                 ..
             } => {
-                let j_fmt = option.as_deref().unwrap_or("%Y-%m-%d %H:%M:%S%.3f");
-                *option = Some(date::convert_pattern(j_fmt));
+                if let Some(j_fmt) = option.as_deref() {
+                    *option = Some(date::convert_pattern(j_fmt));
+                }
                 if let Some(sub) = sub_pattern {
                     preprocess_date_tokens(sub);
                 }
@@ -90,6 +91,7 @@ pub struct Log4jFormatter {
     tokens: Vec<Token>,
     has_exception: bool,
     has_nopex: bool,
+    pid: String,
 }
 
 impl Log4jFormatter {
@@ -102,6 +104,7 @@ impl Log4jFormatter {
             tokens,
             has_exception,
             has_nopex,
+            pid: std::process::id().to_string(),
         }
     }
 }
@@ -125,9 +128,49 @@ where
         }
 
         if !self.has_exception && !self.has_nopex && !data.error_chain.is_empty() {
-            let _ = writeln!(writer);
-            let _ = writeln!(writer, "{}", data.error_chain.join("\nCaused by: "));
+            writer.write_str("\n")?;
+            exception_write(&data, None, false, &mut writer)?;
         }
+        Ok(())
+    }
+}
+
+struct StringAdapter<'a>(&'a mut String);
+
+impl fmt::Write for StringAdapter<'_> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.0.push_str(s);
+        Ok(())
+    }
+}
+
+/// Stack-allocated buffer for short keyword outputs (mirrors logback's `StackBuf`).
+struct StackBuf<const N: usize> {
+    buf: [u8; N],
+    len: usize,
+}
+
+impl<const N: usize> StackBuf<N> {
+    fn new() -> Self {
+        Self {
+            buf: [0u8; N],
+            len: 0,
+        }
+    }
+
+    fn as_str(&self) -> &str {
+        std::str::from_utf8(&self.buf[..self.len]).unwrap_or("")
+    }
+}
+
+impl<const N: usize> fmt::Write for StackBuf<N> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let end = self.len + s.len();
+        if end > N {
+            return Err(fmt::Error);
+        }
+        self.buf[self.len..end].copy_from_slice(s.as_bytes());
+        self.len = end;
         Ok(())
     }
 }
@@ -155,21 +198,54 @@ impl Log4jFormatter {
                 option,
                 sub_pattern,
             } => {
-                let inner = if let Some(sub_tokens) = sub_pattern {
-                    let mut buf = String::new();
+                if let Some(sub_tokens) = sub_pattern {
+                    // Sub-pattern path: rare, keep String
+                    let mut inner = String::new();
                     for sub in sub_tokens {
-                        buf.push_str(&self.render_token_string(meta, data, sub, ctx));
+                        inner.push_str(&self.render_token_string(meta, data, sub, ctx));
                     }
-                    buf
+                    if let Some(m) = modifier {
+                        let mut output = String::new();
+                        self.render_keyword_to_string(
+                            meta,
+                            data,
+                            keyword,
+                            option,
+                            &inner,
+                            ctx,
+                            &mut output,
+                        );
+                        m.apply_to_writer(&output, writer)
+                    } else {
+                        self.render_keyword_to_writer(
+                            meta, data, keyword, option, &inner, ctx, writer,
+                        )
+                    }
+                } else if let Some(m) = modifier {
+                    // No sub-pattern + modifier: use stack buffer
+                    let mut buf = StackBuf::<128>::new();
+                    if self
+                        .render_keyword_to_writer(meta, data, keyword, option, "", ctx, &mut buf)
+                        .is_ok()
+                    {
+                        m.apply_to_writer(buf.as_str(), writer)
+                    } else {
+                        // Stack overflow fallback to heap
+                        let mut output = String::new();
+                        self.render_keyword_to_string(
+                            meta,
+                            data,
+                            keyword,
+                            option,
+                            "",
+                            ctx,
+                            &mut output,
+                        );
+                        m.apply_to_writer(&output, writer)
+                    }
                 } else {
-                    String::new()
-                };
-
-                let output = self.render_keyword(meta, data, keyword, option, &inner, ctx);
-                if let Some(m) = modifier {
-                    writer.write_str(&m.apply(&output))
-                } else {
-                    writer.write_str(&output)
+                    // No sub-pattern + no modifier: direct write (zero-alloc)
+                    self.render_keyword_to_writer(meta, data, keyword, option, "", ctx, writer)
                 }
             }
         }
@@ -206,7 +282,16 @@ impl Log4jFormatter {
                     String::new()
                 };
 
-                let output = self.render_keyword(meta, data, keyword, option, &inner, ctx);
+                let mut output = String::new();
+                self.render_keyword_to_string(
+                    meta,
+                    data,
+                    keyword,
+                    option,
+                    &inner,
+                    ctx,
+                    &mut output,
+                );
                 if let Some(m) = modifier {
                     m.apply(&output)
                 } else {
@@ -216,7 +301,8 @@ impl Log4jFormatter {
         }
     }
 
-    fn render_keyword<S, N>(
+    #[allow(clippy::too_many_arguments)]
+    fn render_keyword_to_writer<S, N>(
         &self,
         meta: &tracing::Metadata<'_>,
         data: &EventData,
@@ -224,7 +310,8 @@ impl Log4jFormatter {
         option: &Option<String>,
         inner: &str,
         ctx: &FmtContext<'_, S, N>,
-    ) -> String
+        writer: &mut dyn fmt::Write,
+    ) -> fmt::Result
     where
         S: Subscriber + for<'a> LookupSpan<'a>,
         N: for<'a> tracing_subscriber::fmt::FormatFields<'a> + 'static,
@@ -232,82 +319,111 @@ impl Log4jFormatter {
         match keyword {
             Keyword::Date => {
                 let chrono_fmt = option.as_deref().unwrap_or("%Y-%m-%d %H:%M:%S%.3f");
-                chrono::Local::now().format(chrono_fmt).to_string()
+                TS_CACHE.with(|c| {
+                    let mut cache = c.borrow_mut();
+                    let cached = cache.get(chrono_fmt);
+                    writer.write_str(cached)
+                })
             }
-            Keyword::Level => meta.level().as_str().to_string(),
-            Keyword::Thread => std::thread::current()
-                .name()
-                .unwrap_or("unknown")
-                .to_string(),
+            Keyword::Level => writer.write_str(meta.level().as_str()),
+            Keyword::Thread => THREAD_NAME.with(|n| writer.write_str(n.as_str())),
             Keyword::Logger | Keyword::Class => {
                 let target = meta.target();
                 let depth: usize = option
                     .as_deref()
                     .and_then(|s| s.trim_end_matches('.').parse().ok())
                     .unwrap_or(0);
-                // log4j's {n.} semantics match our `abbreviate(n)` —
-                // `n` is the number of trailing segments to keep
-                // in full form. For `n=0` we get the last segment
-                // only; otherwise we keep `n` segments and shorten
-                // the rest.
-                abbreviate_log4j(target, depth)
-            }
-            Keyword::Message => data.message.clone(),
-            Keyword::Line => meta.line().map(|l| l.to_string()).unwrap_or_default(),
-            Keyword::File => meta.file().unwrap_or("").to_string(),
-            Keyword::Method => ctx
-                .lookup_current()
-                .map(|span| span.name().to_string())
-                .unwrap_or_default(),
-            Keyword::Ndc => ctx
-                .lookup_current()
-                .map(|span| span.name().to_string())
-                .unwrap_or_default(),
-            Keyword::Mdc => mdc_render(ctx, option.as_deref(), data),
-            Keyword::Pid => std::process::id().to_string(),
-            Keyword::Throwable => exception_render(data, option.as_deref(), false),
-            Keyword::RootException => exception_render(data, option.as_deref(), true),
-            Keyword::NopException => String::new(),
-            Keyword::Highlight => {
-                if inner.is_empty() {
-                    color::highlight(*meta.level(), meta.level().as_str()).to_string()
+                if depth == 0 {
+                    writer.write_str(target)
                 } else {
-                    color::highlight(*meta.level(), inner).to_string()
+                    super::abbreviator::abbreviate_to_writer(target, depth, writer)
+                }
+            }
+            Keyword::Message => writer.write_str(&data.message),
+            Keyword::Line => match meta.line() {
+                Some(l) => write!(writer, "{}", l),
+                None => Ok(()),
+            },
+            Keyword::File => writer.write_str(meta.file().unwrap_or("")),
+            Keyword::Method => match ctx.lookup_current() {
+                Some(span) => writer.write_str(span.name()),
+                None => Ok(()),
+            },
+            Keyword::Ndc => match ctx.lookup_current() {
+                Some(span) => writer.write_str(span.name()),
+                None => Ok(()),
+            },
+            Keyword::Mdc => mdc_write(ctx, option.as_deref(), data, writer),
+            Keyword::Pid => writer.write_str(&self.pid),
+            Keyword::Throwable => exception_write(data, option.as_deref(), false, writer),
+            Keyword::RootException => exception_write(data, option.as_deref(), true, writer),
+            Keyword::NopException => Ok(()),
+            Keyword::Highlight => {
+                let level = *meta.level();
+                if inner.is_empty() {
+                    color::highlight_to_writer(level, meta.level().as_str(), writer)
+                } else {
+                    color::highlight_to_writer(level, inner, writer)
                 }
             }
             Keyword::Clr => {
                 if inner.is_empty() {
-                    String::new()
+                    Ok(())
                 } else {
                     let c = option
                         .as_deref()
                         .and_then(color::Color::parse)
                         .unwrap_or(color::Color::White);
-                    color::with_color(c, inner)
+                    color::with_color_to_writer(c, inner, writer)
                 }
             }
             Keyword::ColorWord(c) => {
                 if inner.is_empty() {
-                    String::new()
+                    Ok(())
                 } else {
-                    color::with_color(*c, inner)
+                    color::with_color_to_writer(*c, inner, writer)
                 }
             }
-            Keyword::Enc(mode) => escape(inner, *mode),
-            Keyword::MaxLen(n) => truncate(inner, *n),
-            Keyword::Percent => "%".to_string(),
+            Keyword::Enc(mode) => escape_write(inner, *mode, writer),
+            Keyword::MaxLen(n) => truncate_write(inner, *n, writer),
+            Keyword::Percent => writer.write_str("%"),
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_keyword_to_string<S, N>(
+        &self,
+        meta: &tracing::Metadata<'_>,
+        data: &EventData,
+        keyword: &Keyword,
+        option: &Option<String>,
+        inner: &str,
+        ctx: &FmtContext<'_, S, N>,
+        buf: &mut String,
+    ) where
+        S: Subscriber + for<'a> LookupSpan<'a>,
+        N: for<'a> tracing_subscriber::fmt::FormatFields<'a> + 'static,
+    {
+        let mut adapter = StringAdapter(buf);
+        let _ =
+            self.render_keyword_to_writer(meta, data, keyword, option, inner, ctx, &mut adapter);
     }
 }
 
 /// Log4j dot-notation abbreviation. `n` is the number of trailing
 /// segments to keep in full; everything before is shortened to its
 /// first letter. (For `n=0`, only the last segment survives.)
+#[allow(dead_code)]
 fn abbreviate_log4j(target: &str, n: usize) -> String {
     super::abbreviator::abbreviate(target, n)
 }
 
-fn mdc_render<S, N>(ctx: &FmtContext<'_, S, N>, key: Option<&str>, data: &EventData) -> String
+fn mdc_write<S, N>(
+    ctx: &FmtContext<'_, S, N>,
+    key: Option<&str>,
+    data: &EventData,
+    writer: &mut dyn fmt::Write,
+) -> fmt::Result
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
     N: for<'a> tracing_subscriber::fmt::FormatFields<'a> + 'static,
@@ -318,73 +434,140 @@ where
                 let ext = span.extensions();
                 if let Some(store) = ext.get::<SpanFieldStore>() {
                     if let Some(v) = store.get(k) {
-                        return v.to_string();
+                        return writer.write_str(v);
                     }
                 }
             }
             if let Some(v) = data.field(k) {
-                return v.to_string();
+                return writer.write_str(v);
             }
-            String::new()
+            Ok(())
         }
         None => {
             let span = match ctx.lookup_current() {
                 Some(s) => s,
-                None => return String::new(),
+                None => return Ok(()),
             };
             let ext = span.extensions();
             let store = match ext.get::<SpanFieldStore>() {
                 Some(s) => s,
-                None => return String::new(),
+                None => return Ok(()),
             };
-            let mut out = String::new();
-            out.push('{');
+            writer.write_char('{')?;
             let mut first = true;
             for (k, v) in store.iter() {
                 if !first {
-                    out.push_str(", ");
+                    writer.write_str(", ")?;
                 }
-                out.push_str(k);
-                out.push('=');
-                out.push_str(v);
+                writer.write_str(k)?;
+                writer.write_char('=')?;
+                writer.write_str(v)?;
                 first = false;
             }
-            out.push('}');
-            out
+            writer.write_char('}')
         }
     }
 }
 
-fn exception_render(data: &EventData, depth_opt: Option<&str>, with_pkg: bool) -> String {
+fn exception_write(
+    data: &EventData,
+    depth_opt: Option<&str>,
+    with_pkg: bool,
+    writer: &mut dyn fmt::Write,
+) -> fmt::Result {
     if data.error_chain.is_empty() {
-        return String::new();
+        return Ok(());
     }
     let max_depth: usize = depth_opt.and_then(|s| s.parse().ok()).unwrap_or(usize::MAX);
-    let frames: Vec<String> = data
-        .error_chain
-        .iter()
-        .take(max_depth)
-        .map(|f| {
-            if with_pkg {
-                format!("{} [{} {}]", f, CRATE_NAME, CRATE_VERSION)
-            } else {
-                f.clone()
-            }
-        })
-        .collect();
-    frames.join("\nCaused by: ")
+    let mut first = true;
+    for frame in data.error_chain.iter().take(max_depth) {
+        if !first {
+            writer.write_str("\nCaused by: ")?;
+        }
+        if with_pkg {
+            write!(writer, "{} [{} {}]", frame, CRATE_NAME, CRATE_VERSION)?;
+        } else {
+            writer.write_str(frame)?;
+        }
+        first = false;
+    }
+    Ok(())
 }
 
+fn escape_write(input: &str, mode: EscapeMode, writer: &mut dyn fmt::Write) -> fmt::Result {
+    match mode {
+        EscapeMode::None => writer.write_str(input),
+        EscapeMode::Html => html_escape_write(input, writer),
+        EscapeMode::Xml => html_escape_write(input, writer),
+        EscapeMode::Json => json_escape_write(input, writer),
+        EscapeMode::Crlf => {
+            for c in input.chars() {
+                match c {
+                    '\r' => writer.write_str("\\r")?,
+                    '\n' => writer.write_str("\\n")?,
+                    _ => writer.write_char(c)?,
+                }
+            }
+            Ok(())
+        }
+    }
+}
+
+fn html_escape_write(s: &str, writer: &mut dyn fmt::Write) -> fmt::Result {
+    for c in s.chars() {
+        match c {
+            '&' => writer.write_str("&amp;")?,
+            '<' => writer.write_str("&lt;")?,
+            '>' => writer.write_str("&gt;")?,
+            '"' => writer.write_str("&quot;")?,
+            '\'' => writer.write_str("&#39;")?,
+            _ => writer.write_char(c)?,
+        }
+    }
+    Ok(())
+}
+
+fn json_escape_write(s: &str, writer: &mut dyn fmt::Write) -> fmt::Result {
+    for c in s.chars() {
+        match c {
+            '"' => writer.write_str("\\\"")?,
+            '\\' => writer.write_str("\\\\")?,
+            '\n' => writer.write_str("\\n")?,
+            '\r' => writer.write_str("\\r")?,
+            '\t' => writer.write_str("\\t")?,
+            '\x08' => writer.write_str("\\b")?,
+            '\x0c' => writer.write_str("\\f")?,
+            c if (c as u32) < 0x20 => write!(writer, "\\u{:04x}", c as u32)?,
+            _ => writer.write_char(c)?,
+        }
+    }
+    Ok(())
+}
+
+fn truncate_write(s: &str, n: usize, writer: &mut dyn fmt::Write) -> fmt::Result {
+    let mut len = 0;
+    for c in s.chars() {
+        if len + c.len_utf8() > n {
+            break;
+        }
+        writer.write_char(c)?;
+        len += c.len_utf8();
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
 fn escape(input: &str, mode: EscapeMode) -> String {
     match mode {
         EscapeMode::None => input.to_string(),
         EscapeMode::Html => html_escape(input),
-        EscapeMode::Xml => html_escape(input), // XML is a subset of HTML for these chars
+        EscapeMode::Xml => html_escape(input),
         EscapeMode::Json => json_escape(input),
         EscapeMode::Crlf => input.replace('\r', "\\r").replace('\n', "\\n"),
     }
 }
 
+#[allow(dead_code)]
 fn html_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
@@ -400,6 +583,7 @@ fn html_escape(s: &str) -> String {
     out
 }
 
+#[allow(dead_code)]
 fn json_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
@@ -420,11 +604,11 @@ fn json_escape(s: &str) -> String {
     out
 }
 
+#[allow(dead_code)]
 fn truncate(s: &str, n: usize) -> String {
     if s.len() <= n {
         s.to_string()
     } else {
-        // Truncate at char boundary to avoid splitting a multi-byte char.
         let mut out = String::new();
         for c in s.chars() {
             if out.len() + c.len_utf8() > n {

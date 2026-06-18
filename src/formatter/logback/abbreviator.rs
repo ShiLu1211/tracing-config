@@ -5,6 +5,8 @@
 //! - n>0 → abbreviate from the left, keeping the last segment full, until total ≤ n
 //!   e.g., "my_app::service::user_handler", n=20 → "m.s.user_handler"
 
+use std::fmt;
+
 /// Abbreviate a logger/target name according to the given max length.
 ///
 /// - `max_length = 0` → return only the last segment
@@ -81,12 +83,98 @@ pub fn abbreviate(name: &str, max_length: usize) -> String {
     format!("{}.{}", result, last)
 }
 
+/// Zero-alloc variant of [`abbreviate`] that writes directly to a `fmt::Write` target.
+pub fn abbreviate_to_writer(
+    name: &str,
+    max_length: usize,
+    writer: &mut dyn fmt::Write,
+) -> fmt::Result {
+    if name.is_empty() {
+        return Ok(());
+    }
+
+    // Use rsplit to find last segment without collecting into Vec
+    let last = name.rsplit("::").next().unwrap_or(name);
+    let has_separator = name.contains("::");
+
+    if !has_separator {
+        // No :: separator
+        if max_length == 0 {
+            return writer.write_str(name);
+        }
+        return truncate_right_write(name, max_length, writer);
+    }
+
+    if max_length == 0 {
+        return writer.write_str(last);
+    }
+
+    let last_len = last.len();
+    if last_len >= max_length {
+        return truncate_right_write(last, max_length, writer);
+    }
+
+    // Compute the prefix portion (everything before the last "::segment")
+    let prefix_end = name.len() - last.len() - 2; // -2 for "::"
+    let prefix = &name[..prefix_end];
+    let available = max_length.saturating_sub(last_len + 1);
+
+    let mut remaining = available;
+    let mut first = true;
+    for seg in prefix.split("::") {
+        if seg.is_empty() {
+            continue;
+        }
+        if remaining == 0 {
+            break;
+        }
+        let seg_len = seg.len();
+        if seg_len <= remaining {
+            // Full segment fits
+            if !first && remaining >= 1 {
+                writer.write_str(".")?;
+                remaining -= 1;
+            }
+            writer.write_str(seg)?;
+            remaining -= seg_len;
+        } else if remaining >= 1 {
+            // Can't fit full segment, take first char
+            if !first && remaining >= 1 {
+                writer.write_str(".")?;
+                remaining -= 1;
+            }
+            if remaining >= 1 {
+                if let Some(c) = seg.chars().next() {
+                    write!(writer, "{}", c)?;
+                    remaining = 0;
+                }
+            }
+        } else {
+            break;
+        }
+        first = false;
+    }
+
+    write!(writer, ".{}", last)
+}
+
 /// Truncate a string from the right to max_length.
 fn truncate_right(s: &str, max_length: usize) -> String {
     if s.len() <= max_length {
         return s.to_string();
     }
     s.chars().take(max_length).collect()
+}
+
+/// Zero-alloc variant of [`truncate_right`] that writes directly to a `fmt::Write` target.
+fn truncate_right_write(s: &str, max_length: usize, writer: &mut dyn fmt::Write) -> fmt::Result {
+    if s.len() <= max_length {
+        return writer.write_str(s);
+    }
+    for c in s.chars().take(max_length) {
+        writer.write_char(c)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

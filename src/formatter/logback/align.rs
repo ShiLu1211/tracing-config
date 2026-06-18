@@ -48,6 +48,43 @@ impl FormatModifier {
             s.to_string()
         }
     }
+
+    /// Apply this modifier by writing directly to a `fmt::Write` target.
+    /// Avoids allocating a new `String` when the output already fits
+    /// within min/max width constraints.
+    pub fn apply_to_writer(&self, s: &str, writer: &mut dyn std::fmt::Write) -> std::fmt::Result {
+        let truncated = if let Some(max) = self.max_width {
+            if s.len() > max {
+                if self.max_from_end {
+                    &s[s.len() - max..]
+                } else {
+                    &s[..max]
+                }
+            } else {
+                s
+            }
+        } else {
+            s
+        };
+
+        let padding = self
+            .min_width
+            .map(|min| min.saturating_sub(truncated.len()))
+            .unwrap_or(0);
+
+        if self.left_align {
+            writer.write_str(truncated)?;
+            for _ in 0..padding {
+                writer.write_char(' ')?;
+            }
+        } else {
+            for _ in 0..padding {
+                writer.write_char(' ')?;
+            }
+            writer.write_str(truncated)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
